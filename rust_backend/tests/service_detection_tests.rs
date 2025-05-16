@@ -1,5 +1,19 @@
 use rust_backend::scanners::service_detection::{detect_service, service_scan};
 use std::net::Ipv4Addr;
+// Add at the top:
+use rust_backend::utils::prettyprint::pretty_print_service_results;
+
+// ...inside your test_service_scan function:
+#[tokio::test]
+async fn test_service_scan() {
+    let open_ports = vec![80, 443, 22, 30778, 53, 21, 153, 20, 19, 23, 148, 9999];
+    let ip = get_test_ip();
+    let results = service_scan(ip, open_ports).await;
+
+    pretty_print_service_results("Service Scan Results", &results);
+
+    assert_eq!(results.len(), 12);
+}
 
 // const TEST_IP: Ipv4Addr = Ipv4Addr::new(192, 168, 1, 1);
 
@@ -108,7 +122,7 @@ async fn test_detect_service_unknown() {
 }
 
 #[tokio::test]
-async fn test_service_scan() {
+async fn test_service_scan_() {
     let open_ports = vec![80, 443, 22, 30778, 53, 21, 153, 20, 19, 23, 148, 9999];
     let ip = get_test_ip();
     let results = service_scan(ip, open_ports).await;
