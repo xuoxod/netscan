@@ -125,3 +125,59 @@ async fn test_service_scan() {
 
     assert_eq!(results.len(), 12);
 }
+
+#[tokio::test]
+async fn test_detect_service_ftp() {
+    let port = 21;
+    let ip = get_test_ip();
+    let result = detect_service(ip, port).await;
+
+    println!("FTP detection result:\n{:#?}", result);
+    if let Some(err) = &result.error {
+        println!("Error for port {}: {}", port, err);
+    }
+    assert!(
+        result.service == Some("FTP".to_string())
+            || result.service == Some("Unknown Service".to_string()),
+        "Expected FTP or Unknown Service, got: {:?}",
+        result.service
+    );
+}
+
+#[tokio::test]
+async fn test_detect_service_smtp() {
+    // Common SMTP ports: 25, 587, 465
+    for port in [25, 587, 465] {
+        let ip = get_test_ip();
+        let result = detect_service(ip, port).await;
+
+        println!("SMTP detection result (port {}):\n{:#?}", port, result);
+        if let Some(err) = &result.error {
+            println!("Error for port {}: {}", port, err);
+        }
+        assert!(
+            result.service == Some("SMTP".to_string())
+                || result.service == Some("Unknown Service".to_string()),
+            "Expected SMTP or Unknown Service, got: {:?}",
+            result.service
+        );
+    }
+}
+
+#[tokio::test]
+async fn test_detect_service_pop3() {
+    let port = 110;
+    let ip = get_test_ip();
+    let result = detect_service(ip, port).await;
+
+    println!("POP3 detection result:\n{:#?}", result);
+    if let Some(err) = &result.error {
+        println!("Error for port {}: {}", port, err);
+    }
+    assert!(
+        result.service == Some("POP3".to_string())
+            || result.service == Some("Unknown Service".to_string()),
+        "Expected POP3 or Unknown Service, got: {:?}",
+        result.service
+    );
+}

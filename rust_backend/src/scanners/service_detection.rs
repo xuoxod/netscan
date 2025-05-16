@@ -14,7 +14,11 @@ pub struct ServiceDetectionResult {
 
 impl ServiceDetectionResult {
     pub fn new(port: u16, service: Option<String>, error: Option<String>) -> Self {
-        Self { port, service, error }
+        Self {
+            port,
+            service,
+            error,
+        }
     }
 }
 
@@ -51,6 +55,87 @@ pub async fn detect_service(ip: Ipv4Addr, port: u16) -> ServiceDetectionResult {
         }
     }
 
+    // --- FTP Detection (port 21) ---
+    match tokio::time::timeout(CONNECTION_TIMEOUT, TcpStream::connect(addr)).await {
+        Ok(Ok(mut stream)) => {
+            let mut buf = vec![0u8; 256];
+            match tokio::time::timeout(Duration::from_secs(2), stream.read(&mut buf)).await {
+                Ok(Ok(n)) => {
+                    let banner = String::from_utf8_lossy(&buf[..n]);
+                    if banner.contains("FTP") {
+                        return ServiceDetectionResult::new(port, Some("FTP".to_string()), None);
+                    }
+                }
+                Ok(Err(e)) => {
+                    last_error = Some(format!("FTP read error: {}", e));
+                }
+                Err(_) => {
+                    last_error = Some("FTP read timeout".to_string());
+                }
+            }
+        }
+        Ok(Err(e)) => {
+            last_error = Some(format!("FTP connect error: {}", e));
+        }
+        Err(_) => {
+            last_error = Some("FTP connect timeout".to_string());
+        }
+    }
+
+    // --- SMTP Detection (port 25, 587, 465) ---
+    match tokio::time::timeout(CONNECTION_TIMEOUT, TcpStream::connect(addr)).await {
+        Ok(Ok(mut stream)) => {
+            let mut buf = vec![0u8; 256];
+            match tokio::time::timeout(Duration::from_secs(2), stream.read(&mut buf)).await {
+                Ok(Ok(n)) => {
+                    let banner = String::from_utf8_lossy(&buf[..n]);
+                    if banner.contains("SMTP") || banner.contains("ESMTP") {
+                        return ServiceDetectionResult::new(port, Some("SMTP".to_string()), None);
+                    }
+                }
+                Ok(Err(e)) => {
+                    last_error = Some(format!("SMTP read error: {}", e));
+                }
+                Err(_) => {
+                    last_error = Some("SMTP read timeout".to_string());
+                }
+            }
+        }
+        Ok(Err(e)) => {
+            last_error = Some(format!("SMTP connect error: {}", e));
+        }
+        Err(_) => {
+            last_error = Some("SMTP connect timeout".to_string());
+        }
+    }
+
+    // --- POP3 Detection (port 110) ---
+    match tokio::time::timeout(CONNECTION_TIMEOUT, TcpStream::connect(addr)).await {
+        Ok(Ok(mut stream)) => {
+            let mut buf = vec![0u8; 256];
+            match tokio::time::timeout(Duration::from_secs(2), stream.read(&mut buf)).await {
+                Ok(Ok(n)) => {
+                    let banner = String::from_utf8_lossy(&buf[..n]);
+                    if banner.contains("+OK") && banner.to_lowercase().contains("pop3") {
+                        return ServiceDetectionResult::new(port, Some("POP3".to_string()), None);
+                    }
+                }
+                Ok(Err(e)) => {
+                    last_error = Some(format!("POP3 read error: {}", e));
+                }
+                Err(_) => {
+                    last_error = Some("POP3 read timeout".to_string());
+                }
+            }
+        }
+        Ok(Err(e)) => {
+            last_error = Some(format!("POP3 connect error: {}", e));
+        }
+        Err(_) => {
+            last_error = Some("POP3 connect timeout".to_string());
+        }
+    }
+
     // --- HTTP Detection ---
     match tokio::time::timeout(CONNECTION_TIMEOUT, TcpStream::connect(addr)).await {
         Ok(Ok(mut stream)) => {
@@ -64,7 +149,11 @@ pub async fn detect_service(ip: Ipv4Addr, port: u16) -> ServiceDetectionResult {
                     Ok(Ok(n)) => {
                         let resp = String::from_utf8_lossy(&buf[..n]);
                         if resp.contains("HTTP/1.1") || resp.contains("HTTP/1.0") {
-                            return ServiceDetectionResult::new(port, Some("HTTP".to_string()), None);
+                            return ServiceDetectionResult::new(
+                                port,
+                                Some("HTTP".to_string()),
+                                None,
+                            );
                         }
                     }
                     Ok(Err(e)) => {
@@ -89,11 +178,8 @@ pub async fn detect_service(ip: Ipv4Addr, port: u16) -> ServiceDetectionResult {
         Ok(Ok(stream)) => {
             let connector = TlsConnector::from(native_tls::TlsConnector::new().unwrap());
             let host = ip.to_string();
-            match tokio::time::timeout(
-                Duration::from_secs(3),
-                connector.connect(&host, stream),
-            )
-            .await
+            match tokio::time::timeout(Duration::from_secs(3), connector.connect(&host, stream))
+                .await
             {
                 Ok(Ok(_tls_stream)) => {
                     return ServiceDetectionResult::new(port, Some("HTTPS".to_string()), None);
