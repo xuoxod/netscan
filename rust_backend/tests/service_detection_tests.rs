@@ -1,27 +1,30 @@
 use rust_backend::scanners::service_detection::{detect_service, service_scan};
-use std::net::Ipv4Addr;
-// Add at the top:
 use rust_backend::utils::prettyprint::pretty_print_service_results;
-
-// ...inside your test_service_scan function:
-#[tokio::test]
-async fn test_service_scan() {
-    let open_ports = vec![80, 443, 22, 30778, 53, 21, 153, 20, 19, 23, 148, 9999];
-    let ip = get_test_ip();
-    let results = service_scan(ip, open_ports).await;
-
-    pretty_print_service_results("Service Scan Results", &results);
-
-    assert_eq!(results.len(), 12);
-}
-
-// const TEST_IP: Ipv4Addr = Ipv4Addr::new(192, 168, 1, 1);
 
 fn get_test_ip() -> std::net::Ipv4Addr {
     std::env::var("TEST_IP")
         .ok()
         .and_then(|ip| ip.parse().ok())
         .unwrap_or(std::net::Ipv4Addr::new(127, 0, 0, 1))
+}
+
+#[tokio::test]
+async fn test_service_scan() {
+    let open_ports = vec![80, 443, 22, 30778, 53, 21, 153, 20, 19, 23, 148, 9999];
+    let ip = get_test_ip();
+    let results = service_scan(ip, Some(open_ports.clone())).await;
+
+    pretty_print_service_results("Service Scan Results", &results);
+
+    assert_eq!(results.len(), open_ports.len());
+}
+
+#[tokio::test]
+async fn test_service_scan_default() {
+    let ip = get_test_ip();
+    let results = service_scan(ip, None).await;
+    // Just check that we scanned the right number of ports
+    assert_eq!(results.len(), 1025); // ports 0..=1024
 }
 
 #[tokio::test]
@@ -49,9 +52,6 @@ async fn test_detect_service_https() {
     let result = detect_service(ip, port).await;
 
     println!("HTTPS detection result: {:?}", result);
-
-    // Example for a single test
-    println!("HTTP detection result:\n{:#?}", result);
     if let Some(err) = &result.error {
         println!("Error for port {}: {}", port, err);
     }
@@ -70,9 +70,6 @@ async fn test_detect_service_ssh() {
     let result = detect_service(ip, port).await;
 
     println!("SSH detection result: {:?}", result);
-
-    // Example for a single test
-    println!("HTTP detection result:\n{:#?}", result);
     if let Some(err) = &result.error {
         println!("Error for port {}: {}", port, err);
     }
@@ -91,9 +88,6 @@ async fn test_detect_service_non_traditional_ssh() {
     let result = detect_service(ip, port).await;
 
     println!("Non-traditional SSH detection result: {:?}", result);
-
-    // Example for a single test
-    println!("HTTP detection result:\n{:#?}", result);
     if let Some(err) = &result.error {
         println!("Error for port {}: {}", port, err);
     }
@@ -112,9 +106,6 @@ async fn test_detect_service_unknown() {
     let result = detect_service(ip, port).await;
 
     println!("Unknown service detection result: {:?}", result);
-
-    // Example for a single test
-    println!("HTTP detection result:\n{:#?}", result);
     if let Some(err) = &result.error {
         println!("Error for port {}: {}", port, err);
     }
@@ -125,7 +116,7 @@ async fn test_detect_service_unknown() {
 async fn test_service_scan_() {
     let open_ports = vec![80, 443, 22, 30778, 53, 21, 153, 20, 19, 23, 148, 9999];
     let ip = get_test_ip();
-    let results = service_scan(ip, open_ports).await;
+    let results = service_scan(ip, Some(open_ports.clone())).await;
 
     println!("Service scan results:");
     for res in &results {
@@ -137,7 +128,7 @@ async fn test_service_scan_() {
         );
     }
 
-    assert_eq!(results.len(), 12);
+    assert_eq!(results.len(), open_ports.len());
 }
 
 #[tokio::test]
