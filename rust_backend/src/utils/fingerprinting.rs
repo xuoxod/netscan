@@ -1,4 +1,4 @@
-use std::net::{Ipv4Addr, SocketAddr, UdpSocket};
+use std::net::{Ipv4Addr, SocketAddr};
 use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
@@ -146,8 +146,28 @@ async fn fingerprint_tcpip_stack(ip: Ipv4Addr) -> Option<String> {
     None
 }
 
-// MAC Vendor (local ARP table, using mac_address crate)
-async fn fingerprint_mac_vendor(_ip: Ipv4Addr) -> Option<String> {
+// MAC Vendor (from ARP table, for remote hosts on local subnet)
+fn get_mac_from_arp(ip: &Ipv4Addr) -> Option<String> {
+    use std::fs::File;
+    use std::io::{BufRead, BufReader};
+    let file = File::open("/proc/net/arp").ok()?;
+    for line in BufReader::new(file).lines().skip(1) {
+        let line = line.ok()?;
+        let parts: Vec<_> = line.split_whitespace().collect();
+        if parts.get(0)? == &ip.to_string() {
+            return Some(parts.get(3)?.to_string());
+        }
+    }
+    None
+}
+
+async fn fingerprint_mac_vendor(ip: Ipv4Addr) -> Option<String> {
+    // Try ARP table first (for remote hosts on local subnet)
+    if let Some(mac) = get_mac_from_arp(&ip) {
+        let oui = mac.get(0..8).unwrap_or("").replace(":", "-").to_uppercase();
+        return Some(format!("MAC: {}", oui));
+    }
+    // Fallback: local interface MAC (not useful for remote hosts)
     use mac_address::get_mac_address;
     if let Ok(Some(mac)) = get_mac_address() {
         let oui = mac.to_string()[..8].replace(":", "-").to_uppercase();

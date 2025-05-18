@@ -1,9 +1,10 @@
 use clap::{Parser, ValueEnum};
 use colored::*;
-use rust_backend::scanners::service_detection::{self, Protocol, ServiceDetectionResult};
+use rust_backend::scanners::service_detection::{self, Protocol};
 use rust_backend::scanners::{pingsweep, tcpscan, udpscan};
 use rust_backend::utils::{fingerprinting, prettyprint};
-use std::net::Ipv4Addr;
+use std::net::{IpAddr, Ipv4Addr};
+use local_ip_address::local_ip;
 
 #[derive(ValueEnum, Clone, Debug)]
 pub enum ProtocolArg {
@@ -154,6 +155,19 @@ async fn main() {
             eprintln!("Ping sweep failed: {}", e);
             return;
         }
+    };
+
+    // --- SKIP LOCAL HOST (only if found) ---
+    let local_ip = match local_ip() {
+        Ok(IpAddr::V4(ip)) => Some(ip),
+        _ => {
+            eprintln!("Could not determine local IPv4 address, skipping local host filtering.");
+            None
+        }
+    };
+    let live_hosts: Vec<Ipv4Addr> = match local_ip {
+        Some(local) => live_hosts.into_iter().filter(|ip| *ip != local).collect(),
+        None => live_hosts,
     };
 
     // 2. Fingerprinting (if requested)
