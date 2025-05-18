@@ -145,7 +145,7 @@ pub async fn detect_service(
                 if let Ok(Ok(mut stream)) =
                     tokio::time::timeout(SSH_CONNECTION_TIMEOUT, TcpStream::connect(addr)).await
                 {
-                    print!("\n\n\n\t\t\tSSH Connection Established on port {}...\n\n\n", port);
+                    print!("\nSSH Connection Established on port {}...\n", port);
 
                     let mut buf = vec![0u8; 256];
                     // Try to read the banner first
@@ -184,17 +184,19 @@ pub async fn detect_service(
                         }
                     }
                 } else {
-                    print!("\n\t\tSSH Connection Failed on port {}...\n", port);
+                    // print!("\n\t\tSSH Connection Failed on port {}...\n", port);
                     errors.push("SSH: connection timeout".to_string());
                 }
                 // errors.push("SSH: no valid SSH banner".to_string());
                 // protocol_failures.push("SSH".to_string());
-                println!("DEBUG: Returning SSH detection result for port {}", port);
+                // println!("DEBUG: Returning SSH detection result for port {}", port);
             }
             Protocol::Ftp => {
                 if let Ok(Ok(mut stream)) =
                     tokio::time::timeout(CONNECTION_TIMEOUT, TcpStream::connect(addr)).await
                 {
+                    print!("\nSSH FTP Established on port {}...\n", port);
+
                     let mut buf = vec![0u8; 256];
                     if let Ok(Ok(n)) =
                         tokio::time::timeout(Duration::from_secs(2), stream.read(&mut buf)).await
@@ -218,6 +220,8 @@ pub async fn detect_service(
                 if let Ok(Ok(mut stream)) =
                     tokio::time::timeout(CONNECTION_TIMEOUT, TcpStream::connect(addr)).await
                 {
+                    print!("\nSSH SMTP Established on port {}...\n", port);
+                    
                     let mut buf = vec![0u8; 256];
                     if let Ok(Ok(n)) =
                         tokio::time::timeout(Duration::from_secs(2), stream.read(&mut buf)).await
@@ -241,6 +245,8 @@ pub async fn detect_service(
                 if let Ok(Ok(mut stream)) =
                     tokio::time::timeout(CONNECTION_TIMEOUT, TcpStream::connect(addr)).await
                 {
+                    print!("\nSSH HTTP Established on port {}...\n", port);
+
                     let _ = stream.write_all(b"HEAD / HTTP/1.0\r\n\r\n").await;
                     let mut buf = vec![0u8; 256];
                     if let Ok(Ok(n)) =
@@ -265,6 +271,8 @@ pub async fn detect_service(
                 if let Ok(Ok(stream)) =
                     tokio::time::timeout(CONNECTION_TIMEOUT, TcpStream::connect(addr)).await
                 {
+                    print!("\nSSH HTTPS Established on port {}...\n", port);
+
                     // Try a TLS handshake
                     if let Ok(connector) = native_tls::TlsConnector::new() {
                         let connector = TlsConnector::from(connector);
@@ -303,6 +311,8 @@ pub async fn detect_service(
                 use tokio::net::UdpSocket;
                 let socket = UdpSocket::bind("0.0.0.0:0").await;
                 if let Ok(sock) = socket {
+                    print!("\nSSH DNS Established on port {}...\n", port);
+
                     let dns_query = [
                         0x12, 0x34, // ID
                         0x01, 0x00, // Standard query
@@ -338,6 +348,8 @@ pub async fn detect_service(
                 if let Ok(Ok(mut stream)) =
                     tokio::time::timeout(CONNECTION_TIMEOUT, TcpStream::connect(addr)).await
                 {
+                    print!("\nSSH POP3 Established on port {}...\n", port);
+
                     let mut buf = vec![0u8; 128];
                     if let Ok(Ok(n)) =
                         tokio::time::timeout(Duration::from_secs(2), stream.read(&mut buf)).await
@@ -361,6 +373,8 @@ pub async fn detect_service(
                 if let Ok(Ok(mut stream)) =
                     tokio::time::timeout(CONNECTION_TIMEOUT, TcpStream::connect(addr)).await
                 {
+                    print!("\nSSH IMAP Established on port {}...\n", port);
+
                     let mut buf = vec![0u8; 128];
                     if let Ok(Ok(n)) =
                         tokio::time::timeout(Duration::from_secs(2), stream.read(&mut buf)).await
@@ -384,6 +398,8 @@ pub async fn detect_service(
                 if let Ok(Ok(mut stream)) =
                     tokio::time::timeout(CONNECTION_TIMEOUT, TcpStream::connect(addr)).await
                 {
+                    print!("\nSSH Telnet Established on port {}...\n", port);
+
                     let mut buf = vec![0u8; 128];
                     if let Ok(Ok(n)) =
                         tokio::time::timeout(Duration::from_secs(2), stream.read(&mut buf)).await
@@ -410,6 +426,8 @@ pub async fn detect_service(
     if let Ok(Ok(mut stream)) =
         tokio::time::timeout(CONNECTION_TIMEOUT, TcpStream::connect(addr)).await
     {
+        print!("\nSSH Generic Banner Established on port {}...\n", port);
+
         let mut buf = vec![0u8; 256];
         if let Ok(Ok(n)) = tokio::time::timeout(Duration::from_secs(2), stream.read(&mut buf)).await
         {
