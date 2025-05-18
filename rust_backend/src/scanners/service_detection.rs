@@ -154,7 +154,7 @@ pub async fn detect_service(
                         tokio::time::timeout(Duration::from_secs(8), stream.read(&mut buf)).await
                     {
                         let banner = String::from_utf8_lossy(&buf[..n]);
-                        println!("DEBUG: SSH banner on port {}: {:?}", port, banner);
+                        // println!("DEBUG: SSH banner on port {}: {:?}", port, banner);
                         if banner.starts_with("SSH-") {
                             return ServiceDetectionResult::new(
                                 port,
@@ -171,10 +171,10 @@ pub async fn detect_service(
                         tokio::time::timeout(Duration::from_secs(8), stream.read(&mut buf2)).await
                     {
                         let banner = String::from_utf8_lossy(&buf2[..n]);
-                        println!(
-                            "DEBUG: SSH banner (after newline) on port {}: {:?}",
-                            port, banner
-                        );
+                        // println!(
+                        //     "DEBUG: SSH banner (after newline) on port {}: {:?}",
+                        //     port, banner
+                        // );
                         if banner.starts_with("SSH-") {
                             print!("\nSSH Connection Established on port {}...\n", port);
 
@@ -205,7 +205,7 @@ pub async fn detect_service(
                         let banner = String::from_utf8_lossy(&buf[..n]);
                         // FTP banners typically contain "FTP"
                         if banner.contains("FTP") {
-                            print!("\nSSH FTP Established on port {}...\n", port);
+                            print!("\nFTP Established on port {}...\n", port);
 
                             return ServiceDetectionResult::new(
                                 port,
@@ -230,7 +230,7 @@ pub async fn detect_service(
                         let banner = String::from_utf8_lossy(&buf[..n]);
                         // SMTP banners typically contain "SMTP" or "ESMTP"
                         if banner.contains("SMTP") || banner.contains("ESMTP") {
-                            print!("\nSSH SMTP Established on port {}...\n", port);
+                            print!("\nSMTP Established on port {}...\n", port);
 
                             return ServiceDetectionResult::new(
                                 port,
@@ -256,7 +256,7 @@ pub async fn detect_service(
                         let banner = String::from_utf8_lossy(&buf[..n]);
                         // HTTP responses contain "HTTP/1.0" or "HTTP/1.1"
                         if banner.contains("HTTP/1.0") || banner.contains("HTTP/1.1") {
-                            print!("\nSSH HTTP Established on port {}...\n", port);
+                            print!("\nHTTP Established on port {}...\n", port);
 
                             return ServiceDetectionResult::new(
                                 port,
@@ -294,7 +294,7 @@ pub async fn detect_service(
                                 let banner = String::from_utf8_lossy(&buf[..n]);
                                 // HTTPS responses may contain "HTTP/1.1" or a TLS handshake
                                 if banner.contains("HTTP/1.1") || !banner.trim().is_empty() {
-                                    print!("\nSSH HTTPS Established on port {}...\n", port);
+                                    print!("\nHTTPS Established on port {}...\n", port);
 
                                     return ServiceDetectionResult::new(
                                         port,
@@ -333,7 +333,7 @@ pub async fn detect_service(
                     {
                         // Check if the response ID matches our query
                         if n >= 2 && buf[0] == 0x12 && buf[1] == 0x34 {
-                            print!("\nSSH DNS Established on port {}...\n", port);
+                            print!("\nDNS Established on port {}...\n", port);
 
                             return ServiceDetectionResult::new(
                                 port,
@@ -358,7 +358,7 @@ pub async fn detect_service(
                         let banner = String::from_utf8_lossy(&buf[..n]);
                         // POP3 banners typically start with "+OK"
                         if banner.starts_with("+OK") {
-                            print!("\nSSH POP3 Established on port {}...\n", port);
+                            print!("\nPOP3 Established on port {}...\n", port);
 
                             return ServiceDetectionResult::new(
                                 port,
@@ -383,7 +383,7 @@ pub async fn detect_service(
                         let banner = String::from_utf8_lossy(&buf[..n]);
                         // IMAP banners typically start with "* OK"
                         if banner.starts_with("* OK") {
-                            print!("\nSSH IMAP Established on port {}...\n", port);
+                            print!("\nIMAP Established on port {}...\n", port);
 
                             return ServiceDetectionResult::new(
                                 port,
@@ -408,7 +408,7 @@ pub async fn detect_service(
                         let banner = String::from_utf8_lossy(&buf[..n]);
                         // Telnet banners often contain "login" or "Welcome"
                         if banner.contains("login") || banner.contains("Welcome") {
-                            print!("\nSSH Telnet Established on port {}...\n", port);
+                            print!("\nTelnet Established on port {}...\n", port);
 
                             return ServiceDetectionResult::new(
                                 port,
