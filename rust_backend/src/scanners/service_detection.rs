@@ -4,7 +4,12 @@ use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 
-// Add this trait and struct at the top of the file:
+//
+// ====================
+// Trait-Based Detection System (not used by CLI, but kept for extensibility)
+// ====================
+//
+
 pub trait ProtocolDetector {
     fn name(&self) -> &'static str;
     fn can_attempt(&self, port: u16) -> bool;
@@ -53,7 +58,19 @@ pub fn detect_services(ip: std::net::IpAddr, ports: &[u16]) -> Vec<DetectionResu
     results
 }
 
-// ...existing code...
+//
+// ====================
+// Async/CLI-Driven Detection System (used by main.rs and CLI)
+// ====================
+//
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Protocol {
+    Ssh,
+    Ftp,
+    Smtp,
+    // Add more as needed
+}
 
 const CONNECTION_TIMEOUT: Duration = Duration::from_secs(5);
 
@@ -62,7 +79,7 @@ pub struct ServiceDetectionResult {
     pub port: u16,
     pub service: Option<String>,
     pub error: Option<String>,
-    pub protocol_failures: Vec<String>, // NEW: Track which protocol checks failed
+    pub protocol_failures: Vec<String>,
 }
 
 impl ServiceDetectionResult {
@@ -99,86 +116,96 @@ fn merged_ports(user_ports: Option<Vec<u16>>) -> Vec<u16> {
     ports
 }
 
-pub async fn detect_service(ip: Ipv4Addr, port: u16) -> ServiceDetectionResult {
+pub async fn detect_service(
+    ip: Ipv4Addr,
+    port: u16,
+    protocols: &[Protocol],
+) -> ServiceDetectionResult {
     use tokio_native_tls::TlsConnector;
     let addr = SocketAddr::new(IpAddr::V4(ip), port);
 
     let mut errors = Vec::new();
     let mut protocol_failures = Vec::new();
 
-    // --- SSH Detection ---
-    if let Ok(Ok(mut stream)) =
-        tokio::time::timeout(CONNECTION_TIMEOUT, TcpStream::connect(addr)).await
-    {
-        let mut buf = vec![0u8; 256];
-        if let Ok(Ok(n)) = tokio::time::timeout(Duration::from_secs(2), stream.read(&mut buf)).await
-        {
-            let banner = String::from_utf8_lossy(&buf[..n]);
-            if banner.starts_with("SSH-") {
-                return ServiceDetectionResult::new(
-                    port,
-                    Some("SSH".to_string()),
-                    None,
-                    protocol_failures,
-                );
-            }
-        }
-    } else {
-        errors.push("SSH: connect/read failed".to_string());
-        protocol_failures.push("SSH".to_string());
-    }
-
-    // --- FTP Detection ---
-    if port == 21 {
-        if let Ok(Ok(mut stream)) =
-            tokio::time::timeout(CONNECTION_TIMEOUT, TcpStream::connect(addr)).await
-        {
-            let mut buf = vec![0u8; 256];
-            if let Ok(Ok(n)) =
-                tokio::time::timeout(Duration::from_secs(2), stream.read(&mut buf)).await
-            {
-                let banner = String::from_utf8_lossy(&buf[..n]);
-                if banner.contains("FTP") {
-                    return ServiceDetectionResult::new(
-                        port,
-                        Some("FTP".to_string()),
-                        None,
-                        protocol_failures,
-                    );
+    for proto in protocols {
+        match proto {
+            Protocol::Ssh => {
+                if port == 22 {
+                    if let Ok(Ok(mut stream)) =
+                        tokio::time::timeout(CONNECTION_TIMEOUT, TcpStream::connect(addr)).await
+                    {
+                        let mut buf = vec![0u8; 256];
+                        if let Ok(Ok(n)) =
+                            tokio::time::timeout(Duration::from_secs(2), stream.read(&mut buf)).await
+                        {
+                            let banner = String::from_utf8_lossy(&buf[..n]);
+                            if banner.starts_with("SSH-") {
+                                return ServiceDetectionResult::new(
+                                    port,
+                                    Some("SSH".to_string()),
+                                    None,
+                                    protocol_failures,
+                                );
+                            }
+                        }
+                    } else {
+                        errors.push("SSH: connect/read failed".to_string());
+                        protocol_failures.push("SSH".to_string());
+                    }
                 }
             }
-        } else {
-            errors.push("FTP: connect/read failed".to_string());
-            protocol_failures.push("FTP".to_string());
-        }
-    }
-
-    // --- SMTP Detection ---
-    if [25, 465, 587].contains(&port) {
-        if let Ok(Ok(mut stream)) =
-            tokio::time::timeout(CONNECTION_TIMEOUT, TcpStream::connect(addr)).await
-        {
-            let mut buf = vec![0u8; 256];
-            if let Ok(Ok(n)) =
-                tokio::time::timeout(Duration::from_secs(2), stream.read(&mut buf)).await
-            {
-                let banner = String::from_utf8_lossy(&buf[..n]);
-                if banner.contains("SMTP") || banner.contains("ESMTP") {
-                    return ServiceDetectionResult::new(
-                        port,
-                        Some("SMTP".to_string()),
-                        None,
-                        protocol_failures,
-                    );
+            Protocol::Ftp => {
+                if port == 21 {
+                    if let Ok(Ok(mut stream)) =
+                        tokio::time::timeout(CONNECTION_TIMEOUT, TcpStream::connect(addr)).await
+                    {
+                        let mut buf = vec![0u8; 256];
+                        if let Ok(Ok(n)) =
+                            tokio::time::timeout(Duration::from_secs(2), stream.read(&mut buf)).await
+                        {
+                            let banner = String::from_utf8_lossy(&buf[..n]);
+                            if banner.contains("FTP") {
+                                return ServiceDetectionResult::new(
+                                    port,
+                                    Some("FTP".to_string()),
+                                    None,
+                                    protocol_failures,
+                                );
+                            }
+                        }
+                    } else {
+                        errors.push("FTP: connect/read failed".to_string());
+                        protocol_failures.push("FTP".to_string());
+                    }
                 }
             }
-        } else {
-            errors.push("SMTP: connect/read failed".to_string());
-            protocol_failures.push("SMTP".to_string());
+            Protocol::Smtp => {
+                if [25, 465, 587].contains(&port) {
+                    if let Ok(Ok(mut stream)) =
+                        tokio::time::timeout(CONNECTION_TIMEOUT, TcpStream::connect(addr)).await
+                    {
+                        let mut buf = vec![0u8; 256];
+                        if let Ok(Ok(n)) =
+                            tokio::time::timeout(Duration::from_secs(2), stream.read(&mut buf)).await
+                        {
+                            let banner = String::from_utf8_lossy(&buf[..n]);
+                            if banner.contains("SMTP") || banner.contains("ESMTP") {
+                                return ServiceDetectionResult::new(
+                                    port,
+                                    Some("SMTP".to_string()),
+                                    None,
+                                    protocol_failures,
+                                );
+                            }
+                        }
+                    } else {
+                        errors.push("SMTP: connect/read failed".to_string());
+                        protocol_failures.push("SMTP".to_string());
+                    }
+                }
+            }
         }
     }
-
-    // ...repeat for other protocols...
 
     // --- Generic Banner Detection (for unknown services) ---
     if let Ok(Ok(mut stream)) =
@@ -212,11 +239,13 @@ pub async fn detect_service(ip: Ipv4Addr, port: u16) -> ServiceDetectionResult {
         protocol_failures,
     )
 }
+
 /// Scan the given ports, or use the default if `user_ports` is None.
 /// User ports are merged and deduplicated with the default list.
 pub async fn service_scan(
     ip: Ipv4Addr,
     user_ports: Option<Vec<u16>>,
+    protocols: &[Protocol],
 ) -> Vec<ServiceDetectionResult> {
     use futures::future::join_all;
 
@@ -224,7 +253,7 @@ pub async fn service_scan(
 
     let futures = ports.into_iter().map(|port| {
         println!("Scanning port {port}...");
-        detect_service(ip, port)
+        detect_service(ip, port, protocols)
     });
     join_all(futures).await
 }

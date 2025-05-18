@@ -1,7 +1,24 @@
-use clap::Parser;
+use clap::{Parser, ValueEnum};
 use colored::*;
-use rust_backend::scanners::service_detection;
-use rust_backend::utils::reports;
+use rust_backend::scanners::service_detection::{self, Protocol, ServiceDetectionResult};
+
+#[derive(ValueEnum, Clone, Debug)]
+pub enum ProtocolArg {
+    Ssh,
+    Ftp,
+    Smtp,
+    // Add more as you implement them
+}
+
+impl ProtocolArg {
+    pub fn as_protocol(&self) -> Protocol {
+        match self {
+            ProtocolArg::Ssh => Protocol::Ssh,
+            ProtocolArg::Ftp => Protocol::Ftp,
+            ProtocolArg::Smtp => Protocol::Smtp,
+        }
+    }
+}
 
 #[derive(Parser, Debug)]
 #[command(
@@ -14,26 +31,19 @@ use rust_backend::utils::reports;
 EXAMPLES:
     netscan --ip 192.168.1.1
     netscan --ip 10.0.0.5 --ports 22,80,443,8080
-    netscan --ip 127.0.0.1 --ports 1-1024
+    netscan --ip 127.0.0.1 --ports 1-1024 --protocols ssh,ftp
+    netscan --ip 127.0.0.1 --protocols smtp
 
-For more information, visit: https://github.com/yourproject/netscan
+Protocols: ssh, ftp, smtp (more coming soon!)
 "
 )]
 pub struct Cli {
-    #[arg(
-        short,
-        long,
-        value_name = "IP",
-        help = "Target IPv4 address (e.g., 192.168.1.1)"
-    )]
+    #[arg(short, long, value_name = "IP", help = "Target IPv4 address (e.g., 192.168.1.1)")]
     ip: String,
-    #[arg(
-        short,
-        long,
-        value_name = "PORTS",
-        help = "Ports to scan (comma-separated or ranges, e.g. 22,80,443,1000-1010)"
-    )]
+    #[arg(short = 'p', long, value_name = "PORTS", help = "Ports to scan (comma-separated or ranges, e.g. 22,80,443,1000-1010)")]
     ports: Option<String>,
+    #[arg(short = 'r', long, value_name = "PROTOCOLS", value_enum, use_value_delimiter = true, help = "Protocols to detect (comma-separated, e.g. ssh,ftp,smtp)")]
+    protocols: Option<Vec<ProtocolArg>>,
     #[arg(short, long, help = "Enable verbose output")]
     verbose: bool,
 }
@@ -74,43 +84,43 @@ async fn main() {
         None => (1..=1024).collect(), // Default: scan well-known ports
     };
 
+    let protocols: Vec<Protocol> = cli
+        .protocols
+        .as_ref()
+        .map(|vec| vec.iter().map(|p| p.as_protocol()).collect())
+        .unwrap_or_else(|| vec![Protocol::Ssh, Protocol::Ftp, Protocol::Smtp]);
+
     if cli.verbose {
         println!("{}", "🔎 Verbose mode enabled".yellow());
         println!("Target: {}", ip.to_string().cyan());
+        println!("Ports: {}", ports.iter().map(|p| p.to_string()).collect::<Vec<_>>().join(",").yellow());
         println!(
-            "Ports: {}",
-            ports
+            "Protocols: {}",
+            protocols
                 .iter()
-                .map(|p| p.to_string())
+                .map(|p| format!("{:?}", p))
                 .collect::<Vec<_>>()
-                .join(",")
+                .join(", ")
                 .yellow()
         );
     }
 
-    // Call your async service scan (update this path if needed)
-    let results = service_detection::service_scan(ip, Some(ports.clone())).await;
+    let results = service_detection::service_scan(ip, Some(ports.clone()), &protocols).await;
 
     print_detected_services_and_summary(&results);
 
-    if let Err(e) =
-        reports::append_summary_to_csv("netscan_protocol_summary.csv", &cli.ip, &results)
-    {
-        eprintln!(
-            "{} Failed to append to protocol summary: {}",
-            "Error:".red(),
-            e
-        );
+    if let Err(e) = rust_backend::utils::reports::append_summary_to_csv(
+        "netscan_protocol_summary.csv",
+        &cli.ip,
+        &results,
+    ) {
+        eprintln!("{} Failed to append to protocol summary: {}", "Error:".red(), e);
     } else {
-        println!(
-            "{}",
-            "📄 Protocol failure summary appended to netscan_protocol_summary.csv".cyan()
-        );
+        println!("{}", "📄 Protocol failure summary appended to netscan_protocol_summary.csv".cyan());
     }
 }
 
-// Print detected services and a concise summary, with colors and emojis
-fn print_detected_services_and_summary(results: &[service_detection::ServiceDetectionResult]) {
+fn print_detected_services_and_summary(results: &[ServiceDetectionResult]) {
     use std::collections::HashMap;
 
     println!("\n{}", "🔬 Detected Services:".bold().green());
@@ -146,12 +156,8 @@ fn print_detected_services_and_summary(results: &[service_detection::ServiceDete
                 r.error.as_deref().unwrap_or("-").red()
             );
         }
-        // Collect protocol failures for summary
         for proto in &r.protocol_failures {
-            protocol_failures
-                .entry(proto.clone())
-                .or_default()
-                .push(r.port);
+            protocol_failures.entry(proto.clone()).or_default().push(r.port);
         }
     }
 
@@ -170,12 +176,7 @@ fn print_detected_services_and_summary(results: &[service_detection::ServiceDete
             "  {} failed on {} ports: {}",
             proto.bold().red(),
             ports.len().to_string().red(),
-            ports
-                .iter()
-                .map(|p| p.to_string())
-                .collect::<Vec<_>>()
-                .join(",")
-                .yellow()
+            ports.iter().map(|p| p.to_string()).collect::<Vec<_>>().join(",").yellow()
         );
     }
 }
