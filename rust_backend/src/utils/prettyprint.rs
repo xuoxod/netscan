@@ -42,3 +42,36 @@ pub fn pretty_print_service_results(
     println!("{}", "-".repeat(70).dimmed());
     println!();
 }
+
+
+
+/// Converts a sorted Vec<u16> into a compact range string, e.g. "1-5,7,9-11"
+pub fn format_port_ranges(ports: &[u16]) -> String {
+    if ports.is_empty() {
+        return String::new();
+    }
+    let mut ranges = Vec::new();
+    let mut start = ports[0];
+    let mut end = ports[0];
+
+    for &port in &ports[1..] {
+        if port == end + 1 {
+            end = port;
+        } else {
+            if start == end {
+                ranges.push(format!("{}", start));
+            } else {
+                ranges.push(format!("{}-{}", start, end));
+            }
+            start = port;
+            end = port;
+        }
+    }
+    // Push the last range
+    if start == end {
+        ranges.push(format!("{}", start));
+    } else {
+        ranges.push(format!("{}-{}", start, end));
+    }
+    ranges.join(",")
+}

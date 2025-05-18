@@ -140,7 +140,7 @@ pub async fn detect_service(
     for proto in protocols {
         match proto {
             Protocol::Ssh => {
-                print!("\n\t\tScanning SSH on port {}...\n", port);
+                // print!("\n\t\tScanning SSH on port {}...\n", port);
                 
                 if let Ok(Ok(mut stream)) =
                     tokio::time::timeout(SSH_CONNECTION_TIMEOUT, TcpStream::connect(addr)).await

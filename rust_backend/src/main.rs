@@ -49,11 +49,28 @@ Protocols: ssh, ftp, smtp, http, https, dns, pop3, imap, telnet (more coming soo
 "
 )]
 pub struct Cli {
-    #[arg(short, long, value_name = "IP", help = "Target IPv4 address (e.g., 192.168.1.1)")]
+    #[arg(
+        short,
+        long,
+        value_name = "IP",
+        help = "Target IPv4 address (e.g., 192.168.1.1)"
+    )]
     ip: String,
-    #[arg(short = 'p', long, value_name = "PORTS", help = "Ports to scan (comma-separated or ranges, e.g. 22,80,443,1000-1010)")]
+    #[arg(
+        short = 'p',
+        long,
+        value_name = "PORTS",
+        help = "Ports to scan (comma-separated or ranges, e.g. 22,80,443,1000-1010)"
+    )]
     ports: Option<String>,
-    #[arg(short = 'r', long, value_name = "PROTOCOLS", value_enum, use_value_delimiter = true, help = "Protocols to detect (comma-separated, e.g. ssh,ftp,smtp)")]
+    #[arg(
+        short = 'r',
+        long,
+        value_name = "PROTOCOLS",
+        value_enum,
+        use_value_delimiter = true,
+        help = "Protocols to detect (comma-separated, e.g. ssh,ftp,smtp)"
+    )]
     protocols: Option<Vec<ProtocolArg>>,
     #[arg(short, long, help = "Enable verbose output")]
     verbose: bool,
@@ -104,7 +121,15 @@ async fn main() {
     if cli.verbose {
         println!("{}", "🔎 Verbose mode enabled".yellow());
         println!("Target: {}", ip.to_string().cyan());
-        println!("Ports: {}", ports.iter().map(|p| p.to_string()).collect::<Vec<_>>().join(",").yellow());
+        println!(
+            "Ports: {}",
+            ports
+                .iter()
+                .map(|p| p.to_string())
+                .collect::<Vec<_>>()
+                .join(",")
+                .yellow()
+        );
         println!(
             "Protocols: {}",
             protocols
@@ -125,9 +150,16 @@ async fn main() {
         &cli.ip,
         &results,
     ) {
-        eprintln!("{} Failed to append to protocol summary: {}", "Error:".red(), e);
+        eprintln!(
+            "{} Failed to append to protocol summary: {}",
+            "Error:".red(),
+            e
+        );
     } else {
-        println!("{}", "📄 Protocol failure summary appended to netscan_protocol_summary.csv".cyan());
+        println!(
+            "{}",
+            "📄 Protocol failure summary appended to netscan_protocol_summary.csv".cyan()
+        );
     }
 }
 
@@ -168,7 +200,10 @@ fn print_detected_services_and_summary(results: &[ServiceDetectionResult]) {
             );
         }
         for proto in &r.protocol_failures {
-            protocol_failures.entry(proto.clone()).or_default().push(r.port);
+            protocol_failures
+                .entry(proto.clone())
+                .or_default()
+                .push(r.port);
         }
     }
 
@@ -187,7 +222,12 @@ fn print_detected_services_and_summary(results: &[ServiceDetectionResult]) {
             "  {} failed on {} ports: {}",
             proto.bold().red(),
             ports.len().to_string().red(),
-            ports.iter().map(|p| p.to_string()).collect::<Vec<_>>().join(",").yellow()
+            rust_backend::utils::prettyprint::format_port_ranges(&{
+                let mut sorted = ports.clone();
+                sorted.sort_unstable();
+                sorted
+            })
+            .yellow()
         );
     }
 }
