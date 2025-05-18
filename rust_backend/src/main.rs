@@ -7,7 +7,12 @@ pub enum ProtocolArg {
     Ssh,
     Ftp,
     Smtp,
-    // Add more as you implement them
+    Http,
+    Https,
+    Dns,
+    Pop3,
+    Imap,
+    Telnet,
 }
 
 impl ProtocolArg {
@@ -16,6 +21,12 @@ impl ProtocolArg {
             ProtocolArg::Ssh => Protocol::Ssh,
             ProtocolArg::Ftp => Protocol::Ftp,
             ProtocolArg::Smtp => Protocol::Smtp,
+            ProtocolArg::Http => Protocol::Http,
+            ProtocolArg::Https => Protocol::Https,
+            ProtocolArg::Dns => Protocol::Dns,
+            ProtocolArg::Pop3 => Protocol::Pop3,
+            ProtocolArg::Imap => Protocol::Imap,
+            ProtocolArg::Telnet => Protocol::Telnet,
         }
     }
 }
@@ -34,7 +45,7 @@ EXAMPLES:
     netscan --ip 127.0.0.1 --ports 1-1024 --protocols ssh,ftp
     netscan --ip 127.0.0.1 --protocols smtp
 
-Protocols: ssh, ftp, smtp (more coming soon!)
+Protocols: ssh, ftp, smtp, http, https, dns, pop3, imap, telnet (more coming soon!)
 "
 )]
 pub struct Cli {
