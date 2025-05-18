@@ -45,7 +45,7 @@ EXAMPLES:
     netscan --ip 127.0.0.1 --ports 1-1024 --protocols ssh,ftp
     netscan --ip 127.0.0.1 --protocols smtp
 
-Protocols: ssh, ftp, smtp, http, https, dns, pop3, imap, telnet (more coming soon!)
+Protocols: ssh, ftp, smtp, http, https, dns, pop3, imap, telnet (more coming eventually!)
 "
 )]
 pub struct Cli {
