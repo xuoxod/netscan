@@ -4,8 +4,8 @@ use std::time::Duration;
 use tokio::net::UdpSocket;
 use tokio::sync::Semaphore;
 
-const MAX_CONCURRENT_TASKS: usize = 100; // Limit the number of concurrent tasks
-const CONNECTION_TIMEOUT: Duration = Duration::from_secs(3); // Timeout for UDP responses
+const MAX_CONCURRENT_TASKS: usize = 64; // Limit the number of concurrent tasks
+const CONNECTION_TIMEOUT: Duration = Duration::from_secs(4); // Timeout for UDP responses
 
 /// Struct to store the results of the UDP port scan
 pub struct UdpScanResult {
@@ -57,7 +57,7 @@ async fn scan_udp_ports(
         let permit = semaphore.clone().acquire_owned().await.unwrap();
         let ip_clone = ip;
         let task = tokio::spawn(async move {
-            let _permit = permit; // Hold the permit for the duration of the task
+            let _permit = permit;
             let addr = SocketAddr::new(IpAddr::V4(ip_clone), port);
 
             match tokio::time::timeout(CONNECTION_TIMEOUT, async {
@@ -66,40 +66,28 @@ async fn scan_udp_ports(
                     .map_err(|e| e.to_string())?;
                 socket.connect(addr).await.map_err(|e| e.to_string())?;
 
-                // Send protocol-specific packets for better reliability
                 if port == 53 {
-                    // Example: Send a DNS query to port 53
                     let dns_query = [
-                        0x12, 0x34, // Transaction ID
-                        0x01, 0x00, // Flags: Standard query
-                        0x00, 0x01, // Questions: 1
-                        0x00, 0x00, // Answer RRs: 0
-                        0x00, 0x00, // Authority RRs: 0
-                        0x00, 0x00, // Additional RRs: 0
-                        0x03, b'w', b'w', b'w', // Query: "www"
-                        0x07, b'e', b'x', b'a', b'm', b'p', b'l', b'e', // Query: "example"
-                        0x03, b'c', b'o', b'm', // Query: "com"
-                        0x00, // Null terminator
-                        0x00, 0x01, // Type: A (host address)
-                        0x00, 0x01, // Class: IN (Internet)
+                        0x12, 0x34, 0x01, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                        0x03, b'w', b'w', b'w', 0x07, b'e', b'x', b'a', b'm', b'p', b'l', b'e',
+                        0x03, b'c', b'o', b'm', 0x00, 0x00, 0x01, 0x00, 0x01,
                     ];
                     socket.send(&dns_query).await.map_err(|e| e.to_string())?;
                 } else {
-                    // Send a single byte for other ports
                     socket.send(&[0u8; 1]).await.map_err(|e| e.to_string())?;
                 }
 
                 let mut buf = [0u8; 1024];
                 match socket.recv(&mut buf).await {
-                    Ok(_) => Ok(()),                          // Port is open
-                    Err(_) => Err("No response".to_string()), // No response
+                    Ok(_) => Ok(()),
+                    Err(_) => Err("No response".to_string()),
                 }
             })
             .await
             {
-                Ok(Ok(_)) => Ok((ip_clone, port)), // Port is open
+                Ok(Ok(_)) => Ok((ip_clone, port)),
                 Ok(Err(e)) => Err(format!("Error on {}:{} - {}", ip_clone, port, e)),
-                Err(_) => Err(format!("Timeout on {}:{}", ip_clone, port)), // Timeout
+                Err(_) => Err(format!("Timeout on {}:{}", ip_clone, port)),
             }
         });
         tasks.push(task);
@@ -108,15 +96,14 @@ async fn scan_udp_ports(
     for task in tasks {
         match task.await {
             Ok(Ok((ip, port))) => result.add_open_port(ip, port),
-            Ok(Err(e)) => result.add_error(ip, e), // Record the error
-            Err(e) => result.add_error(ip, format!("Task failed: {}", e)), // Handle task failure
+            Ok(Err(e)) => result.add_error(ip, e),
+            Err(e) => result.add_error(ip, format!("Task failed: {}", e)),
         }
     }
 
     result
 }
 
-/// Function to perform a UDP port scan on a list of live hosts (Version 2)
 pub async fn udp_scan(
     live_hosts: &Vec<Ipv4Addr>,
     port_range: std::ops::Range<u16>,
@@ -134,4 +121,3 @@ pub async fn udp_scan(
 
     final_result
 }
-

@@ -9,7 +9,7 @@ use std::time::Duration;
 use tokio::sync::Semaphore;
 
 const ICMP_PACKET_SIZE: usize = 64;
-const MAX_CONCURRENT_TASKS: usize = 100; // Limit the number of concurrent tasks
+const MAX_CONCURRENT_TASKS: usize = 64; // Limit the number of concurrent tasks
 const TIMEOUT_SECONDS: u64 = 5; // Timeout for ICMP response
 
 /// Struct to store the results of the ping sweep
@@ -114,14 +114,13 @@ pub async fn ping_sweep(subnet: &str) -> Result<PingSweepResult, String> {
     let ips = parse_subnet(subnet)?;
     let mut result = PingSweepResult::new();
 
-    // Semaphore to limit the number of concurrent tasks
     let semaphore = Arc::new(Semaphore::new(MAX_CONCURRENT_TASKS));
     let mut tasks = Vec::new();
 
     for ip in ips {
         let permit = semaphore.clone().acquire_owned().await.unwrap();
         let task = tokio::spawn(async move {
-            let _permit = permit; // Hold the permit for the duration of the task
+            let _permit = permit;
             (ip, is_host_alive(ip))
         });
         tasks.push(task);
@@ -132,7 +131,7 @@ pub async fn ping_sweep(subnet: &str) -> Result<PingSweepResult, String> {
             Ok((ip, Ok(true))) => result.add_live_host(ip),
             Ok((ip, Ok(false))) => result.add_not_alive_host(ip),
             Ok((ip, Err(e))) => result.add_error(ip, e),
-            Err(e) => result.add_error(Ipv4Addr::new(0, 0, 0, 0), format!("Task failed: {}", e)), // Handle task failure
+            Err(e) => result.add_error(Ipv4Addr::new(0, 0, 0, 0), format!("Task failed: {}", e)),
         }
     }
 

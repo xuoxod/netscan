@@ -4,7 +4,7 @@ use tokio::net::TcpStream;
 use tokio::sync::Semaphore;
 use std::time::Duration;
 
-const MAX_CONCURRENT_TASKS: usize = 100; // Limit the number of concurrent tasks
+const MAX_CONCURRENT_TASKS: usize = 64; // Limit the number of concurrent tasks
 const CONNECTION_TIMEOUT: Duration = Duration::from_secs(3); // Timeout for TCP connections
 
 /// Struct to store the results of the TCP port scan
@@ -67,14 +67,14 @@ async fn scan_ports(ip: Ipv4Addr, port_range: std::ops::Range<u16>, semaphore: A
     for task in tasks {
         match task.await {
             Ok(Ok((ip, port))) => result.add_open_port(ip, port),
-            Ok(Err(e)) => result.add_error(ip, e), // Record the error
-            Err(e) => result.add_error(ip, format!("Task failed: {}", e)), // Handle task failure
+            Ok(Err(e)) => result.add_error(ip, e),
+            Err(e) => result.add_error(ip, format!("Task failed: {}", e)),
         }
     }
 
     result
 }
-/// Function to perform a TCP port scan on a list of live hosts
+
 pub async fn tcp_scan(live_hosts: &Vec<Ipv4Addr>, port_range: std::ops::Range<u16>) -> TcpScanResult {
     let semaphore = Arc::new(Semaphore::new(MAX_CONCURRENT_TASKS));
     let mut final_result = TcpScanResult::new();
