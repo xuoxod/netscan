@@ -68,12 +68,42 @@ async fn fingerprint_snmp(ip: Ipv4Addr) -> Option<String> {
     tokio::task::spawn_blocking(move || {
         use snmp::{SyncSession, Value};
         let target = format!("{}:161", ip);
-        if let Ok(mut sess) =
-            SyncSession::new(target.as_str(), b"public", Some(Duration::from_secs(2)), 0)
-        {
-            if let Ok(mut pdu) = sess.get(&[1, 3, 6, 1, 2, 1, 1, 1, 0]) {
-                if let Some((_, Value::OctetString(desc))) = pdu.varbinds.next() {
-                    return Some(String::from_utf8_lossy(&desc).to_string());
+        let communities = ["public", "private", "community"];
+        let oids = [
+            &[1, 3, 6, 1, 2, 1, 1, 1, 0][..],               // sysDescr
+            &[1, 3, 6, 1, 2, 1, 1, 2, 0][..],               // sysObjectID
+            &[1, 3, 6, 1, 2, 1, 1, 5, 0][..],               // sysName
+            &[1, 3, 6, 1, 2, 1, 47, 1, 1, 1, 1, 11, 1][..], // entPhysicalSerialNum
+        ];
+        for community in &communities {
+            if let Ok(mut sess) = SyncSession::new(
+                target.as_str(),
+                community.as_bytes(),
+                Some(Duration::from_secs(2)),
+                0,
+            ) {
+                let mut details = Vec::new();
+                for oid in &oids {
+                    if let Ok(mut pdu) = sess.get(oid) {
+                        if let Some((_, val)) = pdu.varbinds.next() {
+                            match val {
+                                Value::OctetString(desc) => {
+                                    details.push(format!(
+                                        "{:?}: {}",
+                                        oid,
+                                        String::from_utf8_lossy(desc)
+                                    ));
+                                }
+                                Value::ObjectIdentifier(oid) => {
+                                    details.push(format!("{:?}: {:?}", oid, oid));
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
+                }
+                if !details.is_empty() {
+                    return Some(details.join("\n"));
                 }
             }
         }
@@ -161,21 +191,6 @@ fn get_mac_from_arp(ip: &Ipv4Addr) -> Option<String> {
     None
 }
 
-async fn fingerprint_mac_vendor(ip: Ipv4Addr) -> Option<String> {
-    // Try ARP table first (for remote hosts on local subnet)
-    if let Some(mac) = get_mac_from_arp(&ip) {
-        let oui = mac.get(0..8).unwrap_or("").replace(":", "-").to_uppercase();
-        return Some(format!("MAC: {}", oui));
-    }
-    // Fallback: local interface MAC (not useful for remote hosts)
-    use mac_address::get_mac_address;
-    if let Ok(Some(mac)) = get_mac_address() {
-        let oui = mac.to_string()[..8].replace(":", "-").to_uppercase();
-        return Some(format!("MAC: {}", oui));
-    }
-    None
-}
-
 /// Attempt to fingerprint a host using available techniques.
 /// This is async and can be called for each live host.
 pub async fn fingerprint_host(ip: Ipv4Addr) -> HostFingerprintResult {
@@ -232,4 +247,42 @@ pub async fn fingerprint_host(ip: Ipv4Addr) -> HostFingerprintResult {
     }
 
     result
+}
+
+use once_cell::sync::Lazy;
+use std::collections::HashMap;
+
+static OUI_DB: Lazy<HashMap<String, String>> = Lazy::new(|| {
+    let mut db = HashMap::new();
+    if let Ok(mut rdr) = csv::Reader::from_path("oui.csv") {
+        for result in rdr.records().flatten() {
+            let oui = result.get(1).unwrap_or("").replace("-", ":").to_uppercase();
+            let vendor = result.get(2).unwrap_or("").to_string();
+            db.insert(oui, vendor);
+        }
+    }
+    db
+});
+
+fn lookup_vendor(mac: &str) -> Option<&'static String> {
+    let oui = mac.get(0..8)?;
+    OUI_DB.get(oui)
+}
+
+async fn fingerprint_mac_vendor(ip: Ipv4Addr) -> Option<String> {
+    if let Some(mac) = get_mac_from_arp(&ip) {
+        if let Some(vendor) = lookup_vendor(&mac) {
+            return Some(format!("{} ({})", mac, vendor));
+        }
+        return Some(format!("MAC: {}", mac));
+    }
+    use mac_address::get_mac_address;
+    if let Ok(Some(mac)) = get_mac_address() {
+        let mac_str = mac.to_string();
+        if let Some(vendor) = lookup_vendor(&mac_str) {
+            return Some(format!("{} ({})", mac_str, vendor));
+        }
+        return Some(format!("MAC: {}", mac_str));
+    }
+    None
 }
