@@ -135,18 +135,19 @@ pub async fn detect_service(
     let mut errors = Vec::new();
     let mut protocol_failures = Vec::new();
 
-    println!("DEBUG: detect_service called for port {} with protocols {:?}", port, protocols);
+    println!(
+        "DEBUG: detect_service called for port {} with protocols {:?}",
+        port, protocols
+    );
 
     for proto in protocols {
         match proto {
             Protocol::Ssh => {
                 // print!("\n\t\tScanning SSH on port {}...\n", port);
-                
+
                 if let Ok(Ok(mut stream)) =
                     tokio::time::timeout(SSH_CONNECTION_TIMEOUT, TcpStream::connect(addr)).await
                 {
-                    print!("\nSSH Connection Established on port {}...\n", port);
-
                     let mut buf = vec![0u8; 256];
                     // Try to read the banner first
                     if let Ok(Ok(n)) =
@@ -175,6 +176,8 @@ pub async fn detect_service(
                             port, banner
                         );
                         if banner.starts_with("SSH-") {
+                            print!("\nSSH Connection Established on port {}...\n", port);
+
                             return ServiceDetectionResult::new(
                                 port,
                                 Some("SSH".to_string()),
@@ -195,8 +198,6 @@ pub async fn detect_service(
                 if let Ok(Ok(mut stream)) =
                     tokio::time::timeout(CONNECTION_TIMEOUT, TcpStream::connect(addr)).await
                 {
-                    print!("\nSSH FTP Established on port {}...\n", port);
-
                     let mut buf = vec![0u8; 256];
                     if let Ok(Ok(n)) =
                         tokio::time::timeout(Duration::from_secs(2), stream.read(&mut buf)).await
@@ -204,6 +205,8 @@ pub async fn detect_service(
                         let banner = String::from_utf8_lossy(&buf[..n]);
                         // FTP banners typically contain "FTP"
                         if banner.contains("FTP") {
+                            print!("\nSSH FTP Established on port {}...\n", port);
+
                             return ServiceDetectionResult::new(
                                 port,
                                 Some("FTP".to_string()),
@@ -220,8 +223,6 @@ pub async fn detect_service(
                 if let Ok(Ok(mut stream)) =
                     tokio::time::timeout(CONNECTION_TIMEOUT, TcpStream::connect(addr)).await
                 {
-                    print!("\nSSH SMTP Established on port {}...\n", port);
-                    
                     let mut buf = vec![0u8; 256];
                     if let Ok(Ok(n)) =
                         tokio::time::timeout(Duration::from_secs(2), stream.read(&mut buf)).await
@@ -229,6 +230,8 @@ pub async fn detect_service(
                         let banner = String::from_utf8_lossy(&buf[..n]);
                         // SMTP banners typically contain "SMTP" or "ESMTP"
                         if banner.contains("SMTP") || banner.contains("ESMTP") {
+                            print!("\nSSH SMTP Established on port {}...\n", port);
+
                             return ServiceDetectionResult::new(
                                 port,
                                 Some("SMTP".to_string()),
@@ -245,8 +248,6 @@ pub async fn detect_service(
                 if let Ok(Ok(mut stream)) =
                     tokio::time::timeout(CONNECTION_TIMEOUT, TcpStream::connect(addr)).await
                 {
-                    print!("\nSSH HTTP Established on port {}...\n", port);
-
                     let _ = stream.write_all(b"HEAD / HTTP/1.0\r\n\r\n").await;
                     let mut buf = vec![0u8; 256];
                     if let Ok(Ok(n)) =
@@ -255,6 +256,8 @@ pub async fn detect_service(
                         let banner = String::from_utf8_lossy(&buf[..n]);
                         // HTTP responses contain "HTTP/1.0" or "HTTP/1.1"
                         if banner.contains("HTTP/1.0") || banner.contains("HTTP/1.1") {
+                            print!("\nSSH HTTP Established on port {}...\n", port);
+
                             return ServiceDetectionResult::new(
                                 port,
                                 Some("HTTP".to_string()),
@@ -271,8 +274,6 @@ pub async fn detect_service(
                 if let Ok(Ok(stream)) =
                     tokio::time::timeout(CONNECTION_TIMEOUT, TcpStream::connect(addr)).await
                 {
-                    print!("\nSSH HTTPS Established on port {}...\n", port);
-
                     // Try a TLS handshake
                     if let Ok(connector) = native_tls::TlsConnector::new() {
                         let connector = TlsConnector::from(connector);
@@ -293,6 +294,8 @@ pub async fn detect_service(
                                 let banner = String::from_utf8_lossy(&buf[..n]);
                                 // HTTPS responses may contain "HTTP/1.1" or a TLS handshake
                                 if banner.contains("HTTP/1.1") || !banner.trim().is_empty() {
+                                    print!("\nSSH HTTPS Established on port {}...\n", port);
+
                                     return ServiceDetectionResult::new(
                                         port,
                                         Some("HTTPS".to_string()),
@@ -311,8 +314,6 @@ pub async fn detect_service(
                 use tokio::net::UdpSocket;
                 let socket = UdpSocket::bind("0.0.0.0:0").await;
                 if let Ok(sock) = socket {
-                    print!("\nSSH DNS Established on port {}...\n", port);
-
                     let dns_query = [
                         0x12, 0x34, // ID
                         0x01, 0x00, // Standard query
@@ -332,6 +333,8 @@ pub async fn detect_service(
                     {
                         // Check if the response ID matches our query
                         if n >= 2 && buf[0] == 0x12 && buf[1] == 0x34 {
+                            print!("\nSSH DNS Established on port {}...\n", port);
+
                             return ServiceDetectionResult::new(
                                 port,
                                 Some("DNS".to_string()),
@@ -348,8 +351,6 @@ pub async fn detect_service(
                 if let Ok(Ok(mut stream)) =
                     tokio::time::timeout(CONNECTION_TIMEOUT, TcpStream::connect(addr)).await
                 {
-                    print!("\nSSH POP3 Established on port {}...\n", port);
-
                     let mut buf = vec![0u8; 128];
                     if let Ok(Ok(n)) =
                         tokio::time::timeout(Duration::from_secs(2), stream.read(&mut buf)).await
@@ -357,6 +358,8 @@ pub async fn detect_service(
                         let banner = String::from_utf8_lossy(&buf[..n]);
                         // POP3 banners typically start with "+OK"
                         if banner.starts_with("+OK") {
+                            print!("\nSSH POP3 Established on port {}...\n", port);
+
                             return ServiceDetectionResult::new(
                                 port,
                                 Some("POP3".to_string()),
@@ -373,8 +376,6 @@ pub async fn detect_service(
                 if let Ok(Ok(mut stream)) =
                     tokio::time::timeout(CONNECTION_TIMEOUT, TcpStream::connect(addr)).await
                 {
-                    print!("\nSSH IMAP Established on port {}...\n", port);
-
                     let mut buf = vec![0u8; 128];
                     if let Ok(Ok(n)) =
                         tokio::time::timeout(Duration::from_secs(2), stream.read(&mut buf)).await
@@ -382,6 +383,8 @@ pub async fn detect_service(
                         let banner = String::from_utf8_lossy(&buf[..n]);
                         // IMAP banners typically start with "* OK"
                         if banner.starts_with("* OK") {
+                            print!("\nSSH IMAP Established on port {}...\n", port);
+
                             return ServiceDetectionResult::new(
                                 port,
                                 Some("IMAP".to_string()),
@@ -398,8 +401,6 @@ pub async fn detect_service(
                 if let Ok(Ok(mut stream)) =
                     tokio::time::timeout(CONNECTION_TIMEOUT, TcpStream::connect(addr)).await
                 {
-                    print!("\nSSH Telnet Established on port {}...\n", port);
-
                     let mut buf = vec![0u8; 128];
                     if let Ok(Ok(n)) =
                         tokio::time::timeout(Duration::from_secs(2), stream.read(&mut buf)).await
@@ -407,6 +408,8 @@ pub async fn detect_service(
                         let banner = String::from_utf8_lossy(&buf[..n]);
                         // Telnet banners often contain "login" or "Welcome"
                         if banner.contains("login") || banner.contains("Welcome") {
+                            print!("\nSSH Telnet Established on port {}...\n", port);
+
                             return ServiceDetectionResult::new(
                                 port,
                                 Some("Telnet".to_string()),
@@ -426,13 +429,13 @@ pub async fn detect_service(
     if let Ok(Ok(mut stream)) =
         tokio::time::timeout(CONNECTION_TIMEOUT, TcpStream::connect(addr)).await
     {
-        print!("\nSSH Generic Banner Established on port {}...\n", port);
-
         let mut buf = vec![0u8; 256];
         if let Ok(Ok(n)) = tokio::time::timeout(Duration::from_secs(2), stream.read(&mut buf)).await
         {
             let banner = String::from_utf8_lossy(&buf[..n]);
             if !banner.trim().is_empty() {
+                print!("\nSSH Generic Banner Established on port {}...\n", port);
+
                 return ServiceDetectionResult::new(
                     port,
                     Some(format!("Banner: {}", banner.trim())),
@@ -465,8 +468,8 @@ pub async fn service_scan(
     protocols: &[Protocol],
 ) -> Vec<ServiceDetectionResult> {
     use futures::stream::{self, StreamExt};
-    use tokio::sync::Semaphore;
     use std::sync::Arc;
+    use tokio::sync::Semaphore;
 
     let ports = merged_ports(user_ports);
     let semaphore = Arc::new(Semaphore::new(64)); // Limit to 64 concurrent scans
