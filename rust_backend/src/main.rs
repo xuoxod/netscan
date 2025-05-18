@@ -41,31 +41,34 @@ impl ProtocolArg {
     version,
     author,
     about = "A fast, flexible, and extensible network scanner with host discovery, fingerprinting, and service detection.",
-    long_about = "NetScan performs live host discovery (ping sweep) before all scans. \
-It supports TCP/UDP port scanning, service detection, and host fingerprinting (OS/vendor/etc). \
+    long_about = "NetScan always performs live host discovery (ping sweep) before any scan or detection. \
 You can scan a single IP or an entire subnet. \
-All scans are performed only on discovered live hosts.",
+All scans and detections operate only on discovered live hosts. \
+You must specify which ports and protocols to scan or detect—there are no defaults. \
+Features include TCP/UDP port scanning, service detection, and host fingerprinting (OS/vendor/etc).",
     after_help = "\
 EXAMPLES:
-    netscan --ip 192.168.1.1
-    netscan --ip 192.168.1.0/24 --tcpscan
-    netscan --ip 10.0.0.5 --ports 22,80,443,8080 --udpscan
-    netscan --ip 127.0.0.1 --ports 1-1024 --protocols ssh,ftp --service-detection
+    netscan --ip 192.168.1.1 --ports 22,80 --protocols ssh,http --service-detection
+    netscan --ip 192.168.1.0/24 --tcpscan --ports 22,80,443
+    netscan --ip 10.0.0.5 --ports 21,22,25 --protocols ftp,ssh,smtp --service-detection
+    netscan --ip 127.0.0.1 --ports 8080 --protocols http --service-detection
     netscan --ip 192.168.1.0/24 --fingerprint
 
 OPTIONS:
     --fingerprint         Attempt OS/vendor fingerprinting on live hosts
     --tcpscan             Perform TCP port scan on live hosts
     --udpscan             Perform UDP port scan on live hosts
-    --service-detection   Detect services on live hosts/ports
-    -p, --ports           Ports to scan (e.g. 22,80,443,1000-1010)
-    -r, --protocols       Protocols to detect (e.g. ssh,ftp,smtp)
+    --service-detection   Detect services on live hosts/ports (requires --ports and --protocols)
+    -p, --ports           Ports to scan (comma-separated or ranges, e.g. 22,80,443,1000-1010) [REQUIRED for scan/service-detection]
+    -r, --protocols       Protocols to detect (comma-separated, e.g. ssh,ftp,smtp) [REQUIRED for service-detection]
     -i, --ip              Target IPv4 address or subnet (CIDR)
     -v, --verbose         Enable verbose output
 
 NOTES:
     - Live host discovery is always performed first.
-    - All scans operate only on discovered live hosts.
+    - All scans and detections operate only on discovered live hosts.
+    - You must specify --ports for any scan or detection.
+    - You must specify --protocols for service detection.
     - Run as root for best results (especially for ping sweep).
 "
 )]
@@ -81,7 +84,7 @@ pub struct Cli {
         short = 'p',
         long,
         value_name = "PORTS",
-        help = "Ports to scan (comma-separated or ranges, e.g. 22,80,443,1000-1010)"
+        help = "Ports to scan (comma-separated or ranges, e.g. 22,80,443,1000-1010). REQUIRED for scan/service-detection."
     )]
     ports: Option<String>,
     #[arg(
@@ -90,7 +93,7 @@ pub struct Cli {
         value_name = "PROTOCOLS",
         value_enum,
         use_value_delimiter = true,
-        help = "Protocols to detect (comma-separated, e.g. ssh,ftp,smtp)"
+        help = "Protocols to detect (comma-separated, e.g. ssh,ftp,smtp). REQUIRED for service-detection."
     )]
     protocols: Option<Vec<ProtocolArg>>,
     #[arg(short, long, help = "Enable verbose output")]
@@ -157,7 +160,7 @@ async fn main() {
         }
     };
 
-    // --- SKIP LOCAL HOST (only if found) ---
+    // --- SKIP LOCAL HOST (robust version) ---
     let local_ip = match local_ip() {
         Ok(IpAddr::V4(ip)) => Some(ip),
         _ => {
@@ -169,6 +172,19 @@ async fn main() {
         Some(local) => live_hosts.into_iter().filter(|ip| *ip != local).collect(),
         None => live_hosts,
     };
+
+    // --- Require user to specify ports for all scans/service-detection ---
+    if cli.tcpscan || cli.udpscan || cli.service_detection {
+        if cli.ports.is_none() {
+            eprintln!("You must specify --ports for scanning or service detection.");
+            std::process::exit(1);
+        }
+    }
+    // --- Require user to specify protocols for service-detection ---
+    if cli.service_detection && cli.protocols.is_none() {
+        eprintln!("You must specify --protocols for service detection.");
+        std::process::exit(1);
+    }
 
     // 2. Fingerprinting (if requested)
     if cli.fingerprint {
@@ -202,10 +218,7 @@ async fn main() {
 
     // 3. TCP scan (if requested)
     if cli.tcpscan {
-        let port_vec = match &cli.ports {
-            Some(ports_str) => parse_ports(ports_str),
-            None => (1..=1024).collect(),
-        };
+        let port_vec = parse_ports(cli.ports.as_ref().unwrap());
         if !port_vec.is_empty() {
             let min_port = *port_vec.first().unwrap();
             let max_port = *port_vec.last().unwrap();
@@ -218,10 +231,7 @@ async fn main() {
 
     // 4. UDP scan (if requested)
     if cli.udpscan {
-        let port_vec = match &cli.ports {
-            Some(ports_str) => parse_ports(ports_str),
-            None => (1..=1024).collect(),
-        };
+        let port_vec = parse_ports(cli.ports.as_ref().unwrap());
         if !port_vec.is_empty() {
             let min_port = *port_vec.first().unwrap();
             let max_port = *port_vec.last().unwrap();
@@ -232,17 +242,16 @@ async fn main() {
         }
     }
 
-    // 5. Service detection (if requested, default if no scan flag is set)
-    if cli.service_detection || (!cli.tcpscan && !cli.udpscan && !cli.fingerprint) {
-        let ports: Vec<u16> = match &cli.ports {
-            Some(ports_str) => parse_ports(ports_str),
-            None => (1..=1024).collect(),
-        };
+    // 5. Service detection (if requested)
+    if cli.service_detection {
+        let ports: Vec<u16> = parse_ports(cli.ports.as_ref().unwrap());
         let protocols: Vec<Protocol> = cli
             .protocols
             .as_ref()
-            .map(|vec| vec.iter().map(|p| p.to_protocol()).collect())
-            .unwrap_or_else(|| vec![Protocol::Ssh, Protocol::Ftp, Protocol::Smtp]);
+            .unwrap()
+            .iter()
+            .map(|p| p.to_protocol())
+            .collect();
         for ip in &live_hosts {
             let results =
                 service_detection::service_scan(*ip, Some(ports.clone()), &protocols).await;
