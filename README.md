@@ -172,6 +172,7 @@ A typical layout for this project:
     ├── [setup.sh](http://_vscodecontentref_/3)               # Project setup script
     ├── [README.md](http://_vscodecontentref_/4)
     └── ...
+```
 
 ---
 
