@@ -1,6 +1,16 @@
 use rust_backend::scanners::service_detection::{detect_service, service_scan};
 use rust_backend::utils::prettyprint::pretty_print_service_results;
 
+use rust_backend::scanners::service_detection::Protocol;
+
+const PROTOCOLS: &[Protocol] = &[
+    Protocol::Ssh,
+    Protocol::Ftp,
+    Protocol::Smtp,
+    Protocol::Http,
+    Protocol::Dns,
+];
+
 fn get_test_ip() -> std::net::Ipv4Addr {
     std::env::var("TEST_IP")
         .ok()
@@ -12,7 +22,7 @@ fn get_test_ip() -> std::net::Ipv4Addr {
 async fn test_service_scan() {
     let open_ports = vec![80, 443, 22, 30778, 53, 21, 153, 20, 19, 23, 148, 9999];
     let ip = get_test_ip();
-    let results = service_scan(ip, Some(open_ports.clone())).await;
+    let results = service_scan(ip, Some(open_ports.clone()), PROTOCOLS).await;
 
     pretty_print_service_results("Service Scan Results", &results);
 
@@ -22,7 +32,7 @@ async fn test_service_scan() {
 #[tokio::test]
 async fn test_service_scan_default() {
     let ip = get_test_ip();
-    let results = service_scan(ip, None).await;
+    let results = service_scan(ip, None, PROTOCOLS).await;
     // Just check that we scanned the right number of ports
     assert_eq!(results.len(), 1025); // ports 0..=1024
 }
@@ -31,7 +41,7 @@ async fn test_service_scan_default() {
 async fn test_detect_service_http() {
     let port = 80;
     let ip = get_test_ip();
-    let result = detect_service(ip, port).await;
+    let result = detect_service(ip, port, PROTOCOLS).await;
 
     println!("HTTP detection result:\n{:#?}", result);
     if let Some(err) = &result.error {
@@ -49,7 +59,7 @@ async fn test_detect_service_http() {
 async fn test_detect_service_https() {
     let port = 443;
     let ip = get_test_ip();
-    let result = detect_service(ip, port).await;
+    let result = detect_service(ip, port, PROTOCOLS).await;
 
     println!("HTTPS detection result: {:?}", result);
     if let Some(err) = &result.error {
@@ -67,7 +77,7 @@ async fn test_detect_service_https() {
 async fn test_detect_service_ssh() {
     let port = 22;
     let ip = get_test_ip();
-    let result = detect_service(ip, port).await;
+    let result = detect_service(ip, port, PROTOCOLS).await;
 
     println!("SSH detection result: {:?}", result);
     if let Some(err) = &result.error {
@@ -85,7 +95,7 @@ async fn test_detect_service_ssh() {
 async fn test_detect_service_non_traditional_ssh() {
     let port = 30778;
     let ip = get_test_ip();
-    let result = detect_service(ip, port).await;
+    let result = detect_service(ip, port, PROTOCOLS).await;
 
     println!("Non-traditional SSH detection result: {:?}", result);
     if let Some(err) = &result.error {
@@ -103,7 +113,7 @@ async fn test_detect_service_non_traditional_ssh() {
 async fn test_detect_service_unknown() {
     let port = 9999;
     let ip = get_test_ip();
-    let result = detect_service(ip, port).await;
+    let result = detect_service(ip, port, PROTOCOLS).await;
 
     println!("Unknown service detection result: {:?}", result);
     if let Some(err) = &result.error {
@@ -116,7 +126,7 @@ async fn test_detect_service_unknown() {
 async fn test_service_scan_() {
     let open_ports = vec![80, 443, 22, 30778, 53, 21, 153, 20, 19, 23, 148, 9999];
     let ip = get_test_ip();
-    let results = service_scan(ip, Some(open_ports.clone())).await;
+    let results = service_scan(ip, Some(open_ports.clone()), PROTOCOLS).await;
 
     println!("Service scan results:");
     for res in &results {
@@ -135,7 +145,7 @@ async fn test_service_scan_() {
 async fn test_detect_service_ftp() {
     let port = 21;
     let ip = get_test_ip();
-    let result = detect_service(ip, port).await;
+    let result = detect_service(ip, port, PROTOCOLS).await;
 
     println!("FTP detection result:\n{:#?}", result);
     if let Some(err) = &result.error {
@@ -154,7 +164,7 @@ async fn test_detect_service_smtp() {
     // Common SMTP ports: 25, 587, 465
     for port in [25, 587, 465] {
         let ip = get_test_ip();
-        let result = detect_service(ip, port).await;
+        let result = detect_service(ip, port, PROTOCOLS).await;
 
         println!("SMTP detection result (port {}):\n{:#?}", port, result);
         if let Some(err) = &result.error {
@@ -173,7 +183,7 @@ async fn test_detect_service_smtp() {
 async fn test_detect_service_pop3() {
     let port = 110;
     let ip = get_test_ip();
-    let result = detect_service(ip, port).await;
+    let result = detect_service(ip, port, PROTOCOLS).await;
 
     println!("POP3 detection result:\n{:#?}", result);
     if let Some(err) = &result.error {

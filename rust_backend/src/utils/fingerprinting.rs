@@ -1,288 +1,126 @@
-use std::net::{Ipv4Addr, SocketAddr};
-use std::time::Duration;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::net::TcpStream;
+use crate::detect_dns;
+use crate::detect_ftp;
+use crate::detect_http;
+use crate::detect_smtp;
+use crate::detect_ssh;
+use crate::fingerprint_mac;
+use std::net::Ipv4Addr;
 
-/// The result of host fingerprinting.
 #[derive(Debug, Clone)]
 pub struct HostFingerprintResult {
     pub ip: Ipv4Addr,
+    pub details: Option<String>,
     pub os: Option<String>,
     pub vendor: Option<String>,
     pub serial: Option<String>,
-    pub details: Option<String>,
 }
 
 impl HostFingerprintResult {
     pub fn new(ip: Ipv4Addr) -> Self {
         Self {
             ip,
+            details: None,
             os: None,
             vendor: None,
             serial: None,
-            details: None,
         }
     }
 }
 
-// SSH Banner
-async fn fingerprint_ssh(ip: Ipv4Addr) -> Option<String> {
-    if let Ok(Ok(mut stream)) =
-        tokio::time::timeout(Duration::from_secs(3), TcpStream::connect((ip, 22))).await
-    {
-        let mut buf = vec![0u8; 256];
-        if let Ok(Ok(n)) = tokio::time::timeout(Duration::from_secs(2), stream.read(&mut buf)).await
-        {
-            let banner = String::from_utf8_lossy(&buf[..n]);
-            if banner.starts_with("SSH-") {
-                return Some(banner.trim().to_string());
-            }
-        }
-    }
-    None
-}
-
-// HTTP Banner
-async fn fingerprint_http(ip: Ipv4Addr, port: u16) -> Option<String> {
-    let addr = SocketAddr::new(ip.into(), port);
-    if let Ok(Ok(mut stream)) =
-        tokio::time::timeout(Duration::from_secs(3), TcpStream::connect(addr)).await
-    {
-        let _ = stream
-            .write_all(b"HEAD / HTTP/1.0\r\nHost: example\r\n\r\n")
-            .await;
-        let mut buf = vec![0u8; 512];
-        if let Ok(Ok(n)) = tokio::time::timeout(Duration::from_secs(2), stream.read(&mut buf)).await
-        {
-            let banner = String::from_utf8_lossy(&buf[..n]);
-            if banner.contains("Server:") || banner.contains("HTTP/") {
-                return Some(banner.trim().to_string());
-            }
-        }
-    }
-    None
-}
-
-// SNMP sysDescr (using snmp crate, blocking in spawn_blocking)
-async fn fingerprint_snmp(ip: Ipv4Addr) -> Option<String> {
-    tokio::task::spawn_blocking(move || {
-        use snmp::{SyncSession, Value};
-        let target = format!("{}:161", ip);
-        let communities = ["public", "private", "community"];
-        let oids = [
-            &[1, 3, 6, 1, 2, 1, 1, 1, 0][..],               // sysDescr
-            &[1, 3, 6, 1, 2, 1, 1, 2, 0][..],               // sysObjectID
-            &[1, 3, 6, 1, 2, 1, 1, 5, 0][..],               // sysName
-            &[1, 3, 6, 1, 2, 1, 47, 1, 1, 1, 1, 11, 1][..], // entPhysicalSerialNum
-        ];
-        for community in &communities {
-            if let Ok(mut sess) = SyncSession::new(
-                target.as_str(),
-                community.as_bytes(),
-                Some(Duration::from_secs(2)),
-                0,
-            ) {
-                let mut details = Vec::new();
-                for oid in &oids {
-                    if let Ok(mut pdu) = sess.get(oid) {
-                        if let Some((_, val)) = pdu.varbinds.next() {
-                            match val {
-                                Value::OctetString(desc) => {
-                                    details.push(format!(
-                                        "{:?}: {}",
-                                        oid,
-                                        String::from_utf8_lossy(desc)
-                                    ));
-                                }
-                                Value::ObjectIdentifier(oid) => {
-                                    details.push(format!("{:?}: {:?}", oid, oid));
-                                }
-                                _ => {}
-                            }
-                        }
-                    }
-                }
-                if !details.is_empty() {
-                    return Some(details.join("\n"));
-                }
-            }
-        }
-        None
-    })
-    .await
-    .ok()
-    .flatten()
-}
-
-// NetBIOS Name Query (UDP 137, basic implementation)
-async fn fingerprint_netbios(ip: Ipv4Addr) -> Option<String> {
-    use tokio::net::UdpSocket;
-    let socket = match UdpSocket::bind("0.0.0.0:0").await {
-        Ok(s) => s,
-        Err(_) => return None,
-    };
-    let query = [
-        0xAB, 0xCD, // Transaction ID
-        0x01, 0x10, // Flags
-        0x00, 0x01, // Questions
-        0x00, 0x00, // Answer RRs
-        0x00, 0x00, // Authority RRs
-        0x00, 0x00, // Additional RRs
-        // Name (workgroup/host, wildcard)
-        0x20, b'C', b'K', b'A', b'A', b'A', b'A', b'A', b'A', b'A', b'A', b'A', b'A', b'A', b'A',
-        b'A', b'A', b'A', b'A', b'A', b'A', b'A', b'A', b'A', b'A', b'A', b'A', b'A', b'A', b'A',
-        b'A', b'A', b'A', 0x00, 0x00, 0x21, // NBSTAT
-        0x00, 0x01, // IN
-    ];
-    let _ = socket
-        .send_to(&query, SocketAddr::new(ip.into(), 137))
-        .await;
-    let mut buf = [0u8; 512];
-    if let Some(Ok((n, _))) =
-        tokio::time::timeout(Duration::from_secs(2), socket.recv_from(&mut buf))
-            .await
-            .ok()
-    {
-        // Parse NetBIOS name response (very basic)
-        if n > 57 {
-            let name = String::from_utf8_lossy(&buf[57..(57 + 15).min(n)])
-                .trim()
-                .to_string();
-            return Some(name);
-        }
-    }
-    None
-}
-
-// TCP/IP Stack (simple TTL probe)
-async fn fingerprint_tcpip_stack(ip: Ipv4Addr) -> Option<String> {
-    use tokio::net::UdpSocket;
-    let socket = match UdpSocket::bind("0.0.0.0:0").await {
-        Ok(s) => s,
-        Err(_) => return None,
-    };
-    let _ = socket
-        .send_to(&[0], SocketAddr::new(ip.into(), 33434))
-        .await; // Traceroute-style
-    let mut buf = [0u8; 512];
-    if let Some(Ok((n, _))) =
-        tokio::time::timeout(Duration::from_secs(2), socket.recv_from(&mut buf))
-            .await
-            .ok()
-    {
-        // In real stack fingerprinting, you'd analyze the TTL, window size, etc.
-        return Some(format!("UDP response size: {}", n));
-    }
-    None
-}
-
-// MAC Vendor (from ARP table, for remote hosts on local subnet)
-fn get_mac_from_arp(ip: &Ipv4Addr) -> Option<String> {
-    use std::fs::File;
-    use std::io::{BufRead, BufReader};
-    let file = File::open("/proc/net/arp").ok()?;
-    for line in BufReader::new(file).lines().skip(1) {
-        let line = line.ok()?;
-        let parts: Vec<_> = line.split_whitespace().collect();
-        if parts.get(0)? == &ip.to_string() {
-            return Some(parts.get(3)?.to_string());
-        }
-    }
-    None
-}
-
-/// Attempt to fingerprint a host using available techniques.
-/// This is async and can be called for each live host.
-pub async fn fingerprint_host(ip: Ipv4Addr) -> HostFingerprintResult {
+pub async fn fingerprint_host(ip: Ipv4Addr, ports: &[u16]) -> HostFingerprintResult {
     let mut result = HostFingerprintResult::new(ip);
 
-    // SSH
-    if let Some(banner) = fingerprint_ssh(ip).await {
-        result.details = Some(format!("SSH: {}", banner));
-        if let Some(idx) = banner.find("OpenSSH_") {
-            let os_info = banner[idx..]
-                .split_whitespace()
-                .nth(1)
-                .unwrap_or("")
-                .to_string();
-            result.os = Some(os_info);
+    // MAC fingerprinting
+    let mac = fingerprint_mac::fingerprint(ip).await;
+    if let Some(mac_addr) = mac.mac {
+        result
+            .details
+            .get_or_insert_with(String::new)
+            .push_str(&format!("\nMAC: {}", mac_addr));
+    }
+    if let Some(vendor) = mac.vendor {
+        result
+            .details
+            .get_or_insert_with(String::new)
+            .push_str(&format!(" (Vendor: {})", vendor));
+    }
+    if let Some(mac_err) = mac.error {
+        result
+            .details
+            .get_or_insert_with(String::new)
+            .push_str(&format!("\nMAC error: {}", mac_err));
+    }
+
+    // SSH detection on all user-supplied ports
+    for &port in ports {
+        let ssh = detect_ssh::detect(ip, port).await;
+        if ssh.detected {
+            result
+                .details
+                .get_or_insert_with(String::new)
+                .push_str(&format!(
+                    "\nSSH detected on port {}: {}",
+                    port,
+                    ssh.banner.unwrap_or_default()
+                ));
         }
     }
 
-    // HTTP
-    if let Some(banner) = fingerprint_http(ip, 80).await {
-        result
-            .details
-            .get_or_insert_with(String::new)
-            .push_str(&format!("\nHTTP: {}", banner));
+    // DNS detection on all user-supplied ports
+    for &port in ports {
+        let dns = detect_dns::detect(ip, port).await;
+        if dns.detected {
+            result
+                .details
+                .get_or_insert_with(String::new)
+                .push_str(&format!("\nDNS detected on port {}", port));
+        }
     }
 
-    // SNMP
-    if let Some(sysdescr) = fingerprint_snmp(ip).await {
-        result
-            .details
-            .get_or_insert_with(String::new)
-            .push_str(&format!("\nSNMP: {}", sysdescr));
+    // HTTP detection on all user-supplied ports
+    for &port in ports {
+        let http = detect_http::detect(ip, port).await;
+        if http.detected {
+            result
+                .details
+                .get_or_insert_with(String::new)
+                .push_str(&format!(
+                    "\nHTTP detected on port {}: {}",
+                    port,
+                    http.banner.unwrap_or_default()
+                ));
+        }
     }
 
-    // NetBIOS/SMB
-    if let Some(nb) = fingerprint_netbios(ip).await {
-        result
-            .details
-            .get_or_insert_with(String::new)
-            .push_str(&format!("\nNetBIOS: {}", nb));
+    // SMTP detection on all user-supplied ports
+    for &port in ports {
+        let smtp = detect_smtp::detect(ip, port).await;
+        if smtp.detected {
+            result
+                .details
+                .get_or_insert_with(String::new)
+                .push_str(&format!(
+                    "\nSMTP detected on port {}: {}",
+                    port,
+                    smtp.banner.unwrap_or_default()
+                ));
+        }
     }
 
-    // MAC Vendor
-    if let Some(mac) = fingerprint_mac_vendor(ip).await {
-        result.vendor = Some(mac);
-    }
-
-    // TCP/IP Stack
-    if let Some(stack) = fingerprint_tcpip_stack(ip).await {
-        result
-            .details
-            .get_or_insert_with(String::new)
-            .push_str(&format!("\nTCP/IP: {}", stack));
+    // FTP detection on all user-supplied ports
+    for &port in ports {
+        let ftp = detect_ftp::detect(ip, port).await;
+        if ftp.detected {
+            result
+                .details
+                .get_or_insert_with(String::new)
+                .push_str(&format!(
+                    "\nFTP detected on port {}: {}",
+                    port,
+                    ftp.banner.unwrap_or_default()
+                ));
+        }
     }
 
     result
-}
-
-use once_cell::sync::Lazy;
-use std::collections::HashMap;
-
-static OUI_DB: Lazy<HashMap<String, String>> = Lazy::new(|| {
-    let mut db = HashMap::new();
-    if let Ok(mut rdr) = csv::Reader::from_path("oui.csv") {
-        for result in rdr.records().flatten() {
-            let oui = result.get(1).unwrap_or("").replace("-", ":").to_uppercase();
-            let vendor = result.get(2).unwrap_or("").to_string();
-            db.insert(oui, vendor);
-        }
-    }
-    db
-});
-
-fn lookup_vendor(mac: &str) -> Option<&'static String> {
-    let oui = mac.get(0..8)?;
-    OUI_DB.get(oui)
-}
-
-async fn fingerprint_mac_vendor(ip: Ipv4Addr) -> Option<String> {
-    if let Some(mac) = get_mac_from_arp(&ip) {
-        if let Some(vendor) = lookup_vendor(&mac) {
-            return Some(format!("{} ({})", mac, vendor));
-        }
-        return Some(format!("MAC: {}", mac));
-    }
-    use mac_address::get_mac_address;
-    if let Ok(Some(mac)) = get_mac_address() {
-        let mac_str = mac.to_string();
-        if let Some(vendor) = lookup_vendor(&mac_str) {
-            return Some(format!("{} ({})", mac_str, vendor));
-        }
-        return Some(format!("MAC: {}", mac_str));
-    }
-    None
 }
