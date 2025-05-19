@@ -13,12 +13,14 @@ NetScan is a **modular network toolkit** designed to perform various **network-r
 
 ---
 
-## 🖥️ Java Frontend
+## 🖥️ Java Frontend (Planned)
 
-NetScan includes a Java-based terminal frontend that communicates with the Rust backend via JNA (Java Native Access).
+A Java-based terminal frontend is **intended** for this project, but has **not yet been implemented**.
 
-- The Java frontend provides a terminal interface for configuring scans, viewing results, and managing tasks.
-- See the java_frontend directory for source code and build instructions.
+- The goal is for the Java frontend to provide a terminal interface for configuring scans, viewing results, and managing tasks, communicating with the Rust backend via JNA (Java Native Access).
+- This will allow users to interact with NetScan through a familiar Java CLI, leveraging the power and speed of the Rust backend.
+- When development begins, the `java_frontend/` directory will contain the source code and build instructions for the Java CLI.
+- **Contributions or collaboration on the Java frontend are welcome!** If you are interested in helping design or implement this component, please open an issue or pull request.
 
 ---
 
