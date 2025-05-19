@@ -129,13 +129,9 @@ initialize_rust_backend() {
 }
 
 initialize_java_frontend() {
-    if [ -d "$JAVA_FRONTEND_DIR" ]; then
-        echo -e "\033[1;33mJava frontend already exists. Skipping.\033[0m" | tee -a "$LOG_FILE"
-    else
-        echo -e "\033[1;33mInitializing Java frontend...\033[0m" | tee -a "$LOG_FILE"
-        mkdir -p "$JAVA_FRONTEND_DIR/src/main/java/com/emhcet/netscan"
-        echo -e "\033[1;32mJava frontend initialized.\033[0m" | tee -a "$LOG_FILE"
-    fi
+    echo -e "\033[1;33mRunning Maven Java frontend setup script...\033[0m" | tee -a "$LOG_FILE"
+    bash "$SCRIPT_DIR/setup_java_maven.sh" | tee -a "$LOG_FILE"
+    echo -e "\033[1;32mJava frontend Maven setup complete.\033[0m" | tee -a "$LOG_FILE"
 }
 
 # --- Main Script Logic ---
