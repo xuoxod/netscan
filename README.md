@@ -13,6 +13,34 @@ NetScan is a **modular network toolkit** designed to perform various **network-r
 
 ---
 
+## 🖥️ Java Frontend
+
+NetScan includes a Java-based terminal frontend that communicates with the Rust backend via JNA (Java Native Access).
+
+- The Java frontend provides a terminal interface for configuring scans, viewing results, and managing tasks.
+- See the java_frontend directory for source code and build instructions.
+
+---
+
+## 🦀 Rust Backend
+
+The Rust backend provides the core scanning, detection, and fingerprinting logic. It exposes a command-line interface (CLI) and can also be called from the Java frontend via FFI.
+
+- High-performance, safe, and concurrent network operations.
+- Exposes all major features (ping sweep, port scan, service detection, fingerprinting) via CLI and FFI.
+- See the `rust_backend/` directory for source code, tests, and build instructions.
+
+## 🧰 Features
+
+- Fast ping sweep (ICMP)
+- TCP/UDP port scanning
+- Service detection (SSH, HTTP, FTP, etc.)
+- MAC address fingerprinting
+- Modular and extensible design
+- Cross-platform (Linux, macOS, Windows)
+
+---
+
 ## 🎯 **Goals**
 
 1. **Modular Design**: Support multiple network-related tasks (e.g., scanning, monitoring, etc.).
@@ -24,6 +52,66 @@ NetScan is a **modular network toolkit** designed to perform various **network-r
 7. **Future Extensions**: Explore UDP scanning, service banner grabbing, and other network utilities.
 
 ---
+
+## 🚀 Getting Started
+
+1. **Clone the repo:**  
+
+   git clone https://github.com/xuoxod/netscan.git
+
+2. **Build the Rust backend:**
+
+   cd netscan/rust_backend && cargo build --release
+
+3. **Run a scan:**
+
+   sudo ./target/release/netscan --ip 192.168.1.1 --tcpscan --ports 22,80
+
+---
+
+---
+
+## 📝 Usage Examples
+
+- **Scan a single host for SSH and HTTP:**
+
+```sh
+  Fingerprint a host:
+  sudo ./netscan --ip 192.168.1.158 --tcpscan --ports 22,80 --protocols ssh,http --service-detection
+
+  Full TCP scan for common ports:
+  sudo ./netscan --ip 192.168.1.158 --tcpscan --ports 21,22,23,25,53,80,110,443
+
+  Service detection for DNS and HTTP:
+  sudo ./netscan --ip 192.168.1.1 --ports 53,80 --protocols dns,http --service-detection
+```
+
+---
+
+## 🖨️ Sample Output
+
+Here’s what a typical scan result looks like:
+
+```plaintext
+🛰️  NetScan - Network Service Scanner
+---------------------------------
+🔎 Performing ping sweep on 192.168.1.158/32...
+1 live hosts found.
+  192.168.1.158
+🔗 Performing TCP scan...
+TCP scan completed.
+Total open ports: 1
+Total errors: 30756
+
+Detected Services for 192.168.1.158
+Port     Service              Status     Error
+----------------------------------------------------------------------
+30778    SSH                  OK         -
+22       Unknown Service      FAIL       Connection failed | Connection failed
+80       Unknown Service      FAIL       Connection failed | Connection failed
+----------------------------------------------------------------------
+📄 Protocol failure summary appended to netscan_protocol_summary.csv
+```
 
 ## 💻 **Requirements**
 
@@ -66,22 +154,22 @@ NetScan is a **modular network toolkit** designed to perform various **network-r
 
 ---
 
+```markdown
 ## 📂 **Project Directory Structure**
 
-The following represents the **bare-minimum structure** required for this project:
+A typical layout for this project:
 
-    ```plaintext
-    [4.0K]  .
-    ├── [6.5K]  [setup.sh](https://github.com/xuoxod/netscan.git)          # Main setup script for initializing the project
-    ├── [3.9K]  [README.md](https://github.com/xuoxod/netscan.git)         # Project documentation
-    └── [4.0K]  scripts           # Scripts directory for utilities and helpers
-        ├── [4.0K]  start         # Scripts to start the application
-        ├── [4.0K]  utils         # Utility scripts
-        │   ├── [4.0K]  constants # Constants used across the project
-        │   ├── [4.0K]  purgers   # Scripts for cleaning/purging resources
-        │   └── [4.0K]  validators # Scripts for validation tasks
-        └── [4.0K]  helpers       # Helper scripts for additional functionality
-# netscan
+  ```plaintext
+  netscan.
+    ├── java_frontend/         # Java CLI and interface code
+    │   └── src/...
+    ├── rust_backend/          # Rust backend (CLI, core logic, FFI)
+    │   ├── src/...
+    │   └── tests/...
+    ├── scripts/               # Helper scripts
+    ├── [setup.sh](http://_vscodecontentref_/3)               # Project setup script
+    ├── [README.md](http://_vscodecontentref_/4)
+    └── ...
 
 ---
 
@@ -113,3 +201,20 @@ This project includes comprehensive integration and unit tests for all major mod
 - **test_fingerprint_mac_on_localhost**: Ensures the MAC fingerprinting function does not panic and returns a result for localhost.
 
 **All tests are designed to be robust, clear, and easy to extend. See the `/tests` directory for details.**
+
+---
+
+## 🤝 Contributing
+
+Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+
+- If you add a new protocol or feature, please include corresponding tests.
+- Document any assumptions or requirements for your tests.
+- Open an issue or pull request if you have suggestions or bug reports.
+
+---
+
+## 📝 License
+
+This project is licensed under the MIT License.  
+See the [LICENSE](LICENSE) file for details.
