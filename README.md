@@ -156,7 +156,6 @@ Port     Service              Status     Error
 
 ---
 
-```markdown
 ## 📂 **Project Directory Structure**
 
 A typical layout for this project:
