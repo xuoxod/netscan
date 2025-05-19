@@ -47,14 +47,30 @@ pub fn suggestions_to_json(suggestions: &[ModuleSuggestion]) -> String {
 pub fn suggest_modules(services: &[ServiceInfo]) -> Vec<ModuleSuggestion> {
     // Simple static mapping for demonstration.
     let mut suggestions = Vec::new();
+    
     for s in services {
         let module = match s.service.to_lowercase().as_str() {
             "ssh" => Some("auxiliary/scanner/ssh/ssh_version"),
             "http" => Some("auxiliary/scanner/http/http_version"),
+            "https" => Some("auxiliary/scanner/http/http_version"),
             "smb" | "microsoft-ds" => Some("exploit/windows/smb/ms17_010_eternalblue"),
             "ftp" => Some("auxiliary/scanner/ftp/ftp_version"),
+            "smtp" => Some("auxiliary/scanner/smtp/smtp_version"),
+            "pop3" => Some("auxiliary/scanner/pop3/pop3_version"),
+            "imap" => Some("auxiliary/scanner/imap/imap_version"),
+            "mysql" => Some("auxiliary/scanner/mysql/mysql_version"),
+            "mssql" => Some("auxiliary/scanner/mssql/mssql_ping"),
+            "postgresql" | "postgres" => Some("auxiliary/scanner/postgres/postgres_version"),
+            "rdp" | "ms-wbt-server" => Some("auxiliary/scanner/rdp/rdp_scanner"),
+            "telnet" => Some("auxiliary/scanner/telnet/telnet_version"),
+            "snmp" => Some("auxiliary/scanner/snmp/snmp_enum"),
+            "oracle" => Some("auxiliary/scanner/oracle/tnslsnr_version"),
+            "redis" => Some("auxiliary/scanner/redis/redis_server"),
+            "vnc" => Some("auxiliary/scanner/vnc/vnc_none_auth"),
+            "ldap" => Some("auxiliary/scanner/ldap/ldap_search"),
             _ => None,
         };
+
         if let Some(module) = module {
             suggestions.push(ModuleSuggestion {
                 port: s.port,
