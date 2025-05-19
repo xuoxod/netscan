@@ -1,7 +1,9 @@
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::time::Duration;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+// use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::io::{AsyncReadExt};
 use tokio::net::TcpStream;
+// use tokio_native_tls::TlsConnector;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Protocol {
@@ -17,7 +19,7 @@ pub enum Protocol {
 }
 
 const CONNECTION_TIMEOUT: Duration = Duration::from_secs(5);
-const SSH_CONNECTION_TIMEOUT: Duration = Duration::from_secs(9);
+const _SSH_CONNECTION_TIMEOUT: Duration = Duration::from_secs(9);
 
 #[derive(Debug)]
 pub struct ServiceDetectionResult {
@@ -48,7 +50,6 @@ pub async fn detect_service(
     port: u16,
     protocols: &[Protocol],
 ) -> ServiceDetectionResult {
-    use tokio_native_tls::TlsConnector;
     let addr = SocketAddr::new(IpAddr::V4(ip), port);
 
     let mut errors = Vec::new();

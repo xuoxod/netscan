@@ -174,9 +174,9 @@ async fn main() {
     };
 
     // --- Require user to specify ports for all scans/service-detection ---
-    if cli.tcpscan || cli.udpscan || cli.service_detection {
+    if cli.tcpscan || cli.udpscan || cli.service_detection || cli.fingerprint {
         if cli.ports.is_none() {
-            eprintln!("You must specify --ports for scanning or service detection.");
+            eprintln!("You must specify --ports for scanning, fingerprinting, or service detection.");
             std::process::exit(1);
         }
     }
@@ -186,13 +186,16 @@ async fn main() {
         std::process::exit(1);
     }
 
+    // Parse ports once for all relevant operations
+    let ports: Vec<u16> = cli.ports.as_ref().map(|s| parse_ports(s)).unwrap_or_default();
+
     // 2. Fingerprinting (if requested)
     if cli.fingerprint {
         println!("{}", "🕵️  Fingerprinting live hosts...".cyan());
         let fingerprints = futures::future::join_all(
             live_hosts
                 .iter()
-                .map(|&ip| fingerprinting::fingerprint_host(ip)),
+                .map(|&ip| fingerprinting::fingerprint_host(ip, &ports)),
         )
         .await;
         for fp in fingerprints {
@@ -218,10 +221,9 @@ async fn main() {
 
     // 3. TCP scan (if requested)
     if cli.tcpscan {
-        let port_vec = parse_ports(cli.ports.as_ref().unwrap());
-        if !port_vec.is_empty() {
-            let min_port = *port_vec.first().unwrap();
-            let max_port = *port_vec.last().unwrap();
+        if !ports.is_empty() {
+            let min_port = *ports.first().unwrap();
+            let max_port = *ports.last().unwrap();
             let port_range = min_port..(max_port + 1); // Range<u16>
             println!("{}", "🔗 Performing TCP scan...".cyan());
             let tcp_result = tcpscan::tcp_scan(&live_hosts, port_range).await;
@@ -231,10 +233,9 @@ async fn main() {
 
     // 4. UDP scan (if requested)
     if cli.udpscan {
-        let port_vec = parse_ports(cli.ports.as_ref().unwrap());
-        if !port_vec.is_empty() {
-            let min_port = *port_vec.first().unwrap();
-            let max_port = *port_vec.last().unwrap();
+        if !ports.is_empty() {
+            let min_port = *ports.first().unwrap();
+            let max_port = *ports.last().unwrap();
             let port_range = min_port..(max_port + 1); // Range<u16>
             println!("{}", "🔗 Performing UDP scan...".cyan());
             let udp_result = udpscan::udp_scan(&live_hosts, port_range).await;
@@ -244,7 +245,6 @@ async fn main() {
 
     // 5. Service detection (if requested)
     if cli.service_detection {
-        let ports: Vec<u16> = parse_ports(cli.ports.as_ref().unwrap());
         let protocols: Vec<Protocol> = cli
             .protocols
             .as_ref()

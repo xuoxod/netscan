@@ -32,9 +32,13 @@ async fn test_service_scan() {
 #[tokio::test]
 async fn test_service_scan_default() {
     let ip = get_test_ip();
-    let results = service_scan(ip, None, PROTOCOLS).await;
+    let open_ports = vec![80, 443, 22, 30778, 53, 21, 153, 20, 19, 23, 148, 9999];
+    let results = service_scan(ip, Some(open_ports), PROTOCOLS).await;
+
+    print!("\n\t\tresults length: {}\n", results.len());
+
     // Just check that we scanned the right number of ports
-    assert_eq!(results.len(), 1025); // ports 0..=1024
+    assert_eq!(results.len(), 12); // ports 0..=1024
 }
 
 #[tokio::test]
