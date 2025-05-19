@@ -17,20 +17,22 @@
 //! println!("{}", json);
 //! ```
 
-// ...existing code...
-
-
-
-
 use serde::Serialize;
 use serde_json;
+use serde::Deserialize;
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 pub struct ServiceInfo {
     pub port: u16,
     pub service: String,
     pub banner: Option<String>,
 }
+
+pub fn services_from_json(json: &str) -> Vec<ServiceInfo> {
+    serde_json::from_str(json).unwrap_or_default()
+}
+
+
 
 #[derive(Serialize)]
 pub struct ModuleSuggestion {
@@ -47,7 +49,7 @@ pub fn suggestions_to_json(suggestions: &[ModuleSuggestion]) -> String {
 pub fn suggest_modules(services: &[ServiceInfo]) -> Vec<ModuleSuggestion> {
     // Simple static mapping for demonstration.
     let mut suggestions = Vec::new();
-    
+
     for s in services {
         let module = match s.service.to_lowercase().as_str() {
             "ssh" => Some("auxiliary/scanner/ssh/ssh_version"),
