@@ -82,3 +82,34 @@ The following represents the **bare-minimum structure** required for this projec
         │   └── [4.0K]  validators # Scripts for validation tasks
         └── [4.0K]  helpers       # Helper scripts for additional functionality
 # netscan
+
+---
+
+## 🧪 Test Suite & Expected Behaviors
+
+This project includes comprehensive integration and unit tests for all major modules.
+
+### Service Detection Tests
+
+- **test_service_scan**: Verifies that all specified ports are scanned and results are returned for each.
+- **test_service_scan_default**: Ensures that when no ports are specified, the default range (0..=1024) is scanned.
+- **test_detect_service_http/https/ssh/ftp/smtp/pop3**: Confirms that the correct protocol is detected on standard ports, or "Unknown Service" is returned if not detected.
+- **test_detect_service_non_traditional_ssh**: Checks detection of SSH on a non-standard port.
+- **test_detect_service_unknown**: Ensures that unknown or closed ports are reported as "Unknown Service".
+
+### TCP/UDP Scan Tests
+
+- **test_tcp_scan_valid_host**: Scans a valid host and expects open/closed port results.
+- **test_tcp_scan_invalid_host**: Handles invalid hosts gracefully.
+- **test_tcp_scan_empty_port_range**: Returns no results for an empty port list.
+
+### Pingsweep Tests
+
+- **test_ping_sweep_valid_subnet**: Discovers live hosts in a valid subnet.
+- **test_ping_sweep_invalid_subnet**: Handles invalid subnet input gracefully.
+
+### MAC Fingerprinting Tests
+
+- **test_fingerprint_mac_on_localhost**: Ensures the MAC fingerprinting function does not panic and returns a result for localhost.
+
+**All tests are designed to be robust, clear, and easy to extend. See the `/tests` directory for details.**
