@@ -1,10 +1,11 @@
 use clap::{Parser, ValueEnum};
 use colored::*;
+use local_ip_address::local_ip;
 use rust_backend::scanners::service_detection::{self, Protocol};
 use rust_backend::scanners::{pingsweep, tcpscan, udpscan};
 use rust_backend::utils::{fingerprinting, prettyprint};
+use std::io::{self, Write};
 use std::net::{IpAddr, Ipv4Addr};
-use local_ip_address::local_ip;
 
 #[derive(ValueEnum, Clone, Debug)]
 pub enum ProtocolArg {
@@ -60,9 +61,10 @@ OPTIONS:
     --udpscan             Perform UDP port scan on live hosts
     --service-detection   Detect services on live hosts/ports (requires --ports and --protocols)
     -p, --ports           Ports to scan (comma-separated or ranges, e.g. 22,80,443,1000-1010) [REQUIRED for scan/service-detection]
-    -r, --protocols       Protocols to detect (comma-separated, e.g. ssh,ftp,smtp) [REQUIRED for service-detection]
+    -r, --protocols       Protocols to detect (comma-separated, e.g. ssh,ftp,smtp) [REQUIRED for service detection]
     -i, --ip              Target IPv4 address or subnet (CIDR)
     -v, --verbose         Enable verbose output
+    --discover-only       Only perform live host discovery and exit
 
 NOTES:
     - Live host discovery is always performed first.
@@ -106,6 +108,8 @@ pub struct Cli {
     udpscan: bool,
     #[arg(long, help = "Perform service detection on live hosts")]
     service_detection: bool,
+    #[arg(long, help = "Only perform live host discovery and exit")]
+    discover_only: bool,
 }
 
 fn parse_ports(ports_str: &str) -> Vec<u16> {
@@ -173,10 +177,22 @@ async fn main() {
         None => live_hosts,
     };
 
+    // --- Only perform discovery if requested ---
+    if cli.discover_only {
+        println!("{}", "\nLive hosts discovered:".bold().cyan());
+        for h in &live_hosts {
+            println!("  {}", h.to_string().green());
+        }
+        println!("{}", "\nDiscovery complete. Exiting.".bold().yellow());
+        return;
+    }
+
     // --- Require user to specify ports for all scans/service-detection ---
     if cli.tcpscan || cli.udpscan || cli.service_detection || cli.fingerprint {
         if cli.ports.is_none() {
-            eprintln!("You must specify --ports for scanning, fingerprinting, or service detection.");
+            eprintln!(
+                "You must specify --ports for scanning, fingerprinting, or service detection."
+            );
             std::process::exit(1);
         }
     }
@@ -187,20 +203,36 @@ async fn main() {
     }
 
     // Parse ports once for all relevant operations
-    let ports: Vec<u16> = cli.ports.as_ref().map(|s| parse_ports(s)).unwrap_or_default();
+    let ports: Vec<u16> = cli
+        .ports
+        .as_ref()
+        .map(|s| parse_ports(s))
+        .unwrap_or_default();
 
-    // 2. Fingerprinting (if requested)
+    // 2. Fingerprinting (if requested) with in-place updating
     if cli.fingerprint {
         println!("{}", "🕵️  Fingerprinting live hosts...".cyan());
-        let fingerprints = futures::future::join_all(
-            live_hosts
-                .iter()
-                .map(|&ip| fingerprinting::fingerprint_host(ip, &ports)),
-        )
-        .await;
+        let mut fingerprints = Vec::new();
+        for (i, live_host) in live_hosts.iter().enumerate() {
+            print!(
+                "\r{}",
+                format!(
+                    "  Fingerprinting host {}/{}: {}...",
+                    i + 1,
+                    live_hosts.len(),
+                    live_host.ip
+                )
+                .bold()
+                .yellow()
+            );
+            io::stdout().flush().unwrap();
+            let fp = fingerprinting::fingerprint_host(live_host, &ports).await;
+            fingerprints.push(fp);
+        }
+        println!("\n{}", "Fingerprinting complete!\n".bold().green());
         for fp in fingerprints {
             println!(
-                "{}\n  {}: {}\n  {}: {}\n  {}: {}\n  {}: {}",
+                "{}\n  {}: {}\n  {}: {}\n  {}: {}\n  {}: {}\n  {}: {}",
                 format!("{}", fp.ip).bold().yellow(),
                 "OS".bold().blue(),
                 fp.os.as_deref().unwrap_or("Unknown").green(),
@@ -208,6 +240,8 @@ async fn main() {
                 fp.vendor.as_deref().unwrap_or("Unknown").green(),
                 "Serial".bold().blue(),
                 fp.serial.as_deref().unwrap_or("Unknown").green(),
+                "MAC".bold().blue(),
+                fp.mac.as_deref().unwrap_or("Unknown").green(),
                 "Details".bold().blue(),
                 fp.details
                     .as_deref()
